@@ -1,0 +1,81 @@
+# Grady's QMD Work
+
+## Reading in the Data
+
+```{r}
+# Loading the packages
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+
+
+# Loading the data
+df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+```
+
+## EDA for Worst
+
+Worst: mean of the three largest values (mean of the "outliers")
+- Will give an idea of how far the mean of the largest values are from the true mean
+
+### Table Comparing Benign vs Malignant
+```{r}
+# Creating a new dataframe
+worst_stats <- df |>
+  group_by(diagnosis) |>
+  summarise(
+    count = n(),
+    mean_radius_worst = mean(radius_worst),
+    se_radius_worst = sd(radius_worst),
+    mean_texture_worst = mean(texture_worst),
+    se_texture_worst = sd(texture_worst),
+    mean_perimeter_worst = mean(perimeter_worst),
+    se_perimeter_worst = sd(perimeter_worst),
+    mean_area_worst = mean(area_worst),
+    se_area_worst = sd(area_worst),
+    mean_smoothness_worst = mean(smoothness_worst),
+    se_smoothness_worst = sd(smoothness_worst),
+    mean_compactness_worst = mean(compactness_worst),
+    se_compactness_worst = sd(compactness_worst),
+    mean_concavity_worst = mean(concavity_worst),
+    se_concavity_worst = sd(concavity_worst),
+    mean_concave.points_worst = mean(concave.points_worst),
+    se_concave.points_worst = sd(concave.points_worst),
+    mean_symmetry_worst = mean(symmetry_worst),
+    se_symmetry_worst = sd(symmetry_worst),
+    mean_fractal_dimension_worst = mean(fractal_dimension_worst),
+    se_fractal_dimension_worst = sd(fractal_dimension_worst),
+  )
+
+# Transposing the dataframe
+worst_stats <- t(worst_stats)
+
+# Making the diagnosis the column
+colnames(worst_stats) <- as.character(unlist(worst_stats[1, ])) 
+worst_stats <- worst_stats[-1, ]  # remove the first row
+
+```
+
+Observations:
+**Note: These worst values are only being calculated from 3 observations in each mass which are determined to be the "worst" so it's important to keep in mind the ow sample size when comparing an calculations for benign and malignant
+- Malignant tissue has a higher mean worst radius which is 1.5 times that of benign tissue
+- The mean texture and mean perimeter are also higher for malignant 
+- Mean area is nearly triple for malignant than benign while the standard error is nearly quadruple
+- Mean compactness is also nearly double for malignant
+- Mean concavity is nearly triple as well as mean concave.points (the standard error is also much higher for the mean concave.points)
+- Mean symmetry is fairly similar across both types of tissue althogh malignant has a higher standard error
+- Fractical dimension is slightly higher for malignant than benign tissue
+- Most of the standard errors are fairly similar which is interesting because it gives stronger evidence that the features with higher means for malignant will likely have higher means and could be used as an indicator of whether the tissue is benign or malignant based on the average of the three most extreme points
+
+
+
+### Basic Distributions Separated by Tissue Type
+
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = radius_worst, fill = diagnosis))
+```
+
+
+
