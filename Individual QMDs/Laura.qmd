@@ -1,0 +1,282 @@
+# Laura's QMD Work
+
+## Reading in the Data
+
+```{r}
+# Loading the packages
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+
+
+# Loading the data
+df <- read.csv("data.csv")
+```
+
+## EDA for Mean
+
+Mean: mean of all values 
+
+
+### Table Comparing Benign vs Malignant
+```{r}
+# Creating a new dataframe
+stats_mean <- df |>
+  group_by(diagnosis) |>
+  summarise(
+    count = n(),
+    mean_radius = mean(radius_mean),
+    median_radius = median(radius_mean),
+    se_radius = sd(radius_mean),
+    mean_texture = mean(texture_mean),
+    median_texture = median(texture_mean),
+    se_texture = sd(texture_mean),
+    mean_perimeter = mean(perimeter_mean),
+    median_perimeter = median(perimeter_mean),
+    se_perimeter = sd(perimeter_mean),
+    mean_area = mean(area_mean),
+    median_area = median(area_mean),
+    se_area = sd(area_mean),
+    mean_smoothness = mean(smoothness_mean),
+    median_smoothness = median(smoothness_mean),
+    se_smoothness = sd(smoothness_mean),
+    mean_compactness = mean(compactness_mean),
+    median_compactness = median(compactness_mean),
+    se_compactness = sd(compactness_mean),
+    mean_concavity = mean(concavity_mean),
+    median_concavity = median(concavity_mean),
+    se_concavity = sd(concavity_mean),
+    mean_concave.points = mean(concave.points_mean),
+    median_concave.points = median(concave.points_mean),
+    se_concave.points = sd(concave.points_mean),
+    mean_symmetry = mean(symmetry_mean),
+    median_symmetry = median(symmetry_mean),
+    se_symmetry = sd(symmetry_mean),
+    mean_fractal_dimension = mean(fractal_dimension_mean),
+    median_fractal_dimension = median(fractal_dimension_mean),
+    se_fractal_dimension = sd(fractal_dimension_mean),
+  )
+
+# Transposing the dataframe
+stats_mean_t <- t(stats_mean)
+
+# Making the diagnosis the column
+colnames(stats_mean_t) <- as.character(unlist(stats_mean_t[1, ])) 
+stats_mean_t <- stats_mean_t[-1, ]  # remove the first row
+
+stats_mean_t
+```
+
+Key Observations
+- Malignant nuclei are noticeably larger by radius, perimeter, and area and have more texture variation. 
+- Malignant nuclei have deeper concave regions
+- The fractal dimensions are similar
+- The standard errors for radius, area, and concavity were significantly larger.
+
+### Basic Distributions Separated by Tissue Type
+
+```{r}
+# create ordered levels and a reversed palette
+levels_diag <- levels(factor(df$diagnosis))         # preserve factor ordering
+pal <- rev(scales::hue_pal()(length(levels_diag)))  # reversed palette
+names(pal) <- levels_diag    
+```
+
+#### Radius
+
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = radius_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_radius, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_radius, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Radius (mean)", y = "Count",
+       title = "Distribution of the Mean Radius by Diagnosis")
+
+```
+The above graph shows the mean radius based on whether the tissue is benign or malignant. The mean values are in the dashed lines and the median values are the solid lines.
+
+We also see that the benign distribution has a mean very close to the median, whereas the malignant distribution has a mean which is greater than the median due to outliers.
+
+Both look fairly normally distributed, but we may want to address the outliers in the malignant distribution.
+
+#### Texture
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = texture_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_texture, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_texture, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Texture (mean)", y = "Count",
+       title = "Distribution of the Mean Texture by Diagnosis")
+```
+
+These distributins have a fairly similar shape and both look roughly normal although there are some potential outliers for the malignant tissue. Transformation is likely not needed for this distribution unless we want to correct for outliers.
+
+#### Perimeter
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = perimeter_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_perimeter, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_perimeter, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Perimeter (mean)", y = "Count",
+       title = "Distribution of the Mean Perimeter by Diagnosis")
+
+```
+
+For Perimeter we notice that malignant tissue is more right-skewed based on the fact that the mean is a bit higher than the median. Although a transformation could be useful to correct for this asymmetry, we might not want to transform the distributions since the malignant distribution is fairly normal.
+
+#### Area
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = area_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_area, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_area, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Area (mean)", y = "Count",
+       title = "Distribution of the Mean Area by Diagnosis")
+```
+This is one of the first variables where area is very differently distributed between malignant and benign tissue. It might be worth further exploring area for this reason, especially given how strong of a right skew the malignant tissue has.
+
+#### Smoothness
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = smoothness_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_smoothness, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_smoothness, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Smoothness (mean)", y = "Count",
+       title = "Distribution of the Mean Smoothness by Diagnosis")
+```
+
+This distribution is fairly similar across both tissues although malignant does tend to have a higher mean and medina value of smoothness.
+
+#### Compactness
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = compactness_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_compactness, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_compactness, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Compactness (mean)", y = "Count",
+       title = "Distribution of the Mean Compactness by Diagnosis")
+```
+
+Similarly to area, the compactness is much more spread out for malignant tissue and has a stronger presence of outliers. However, the benign tissue is also right skewed a bit. Applying a transformation to both of these distributions might help to address the normality assumptions. 
+
+#### Concavity
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = concavity_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_concavity, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_concavity, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Concavity (mean)", y = "Count",
+       title = "Distribution of the Mean Concavity by Diagnosis")
+```
+
+Again, both malignant and benign are right skewed but benign has a stronger right skew in this distribution. Applying a transformation will be usefult o address the violation of normality assumptions.
+
+#### Texture
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = concave.points_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_concave.points, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_concave.points, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Concave Points (mean)", y = "Count",
+       title = "Distribution of the Mean Concave Points by Diagnosis")
+
+```
+
+The mean concave points are both fairly normally distributed with the malignant tissue having a much higher mean an median when comparing the types of tissue which could be something to explore further.
+
+#### Symmetry
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = symmetry_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_symmetry, color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_symmetry, color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Symmetry (mean)", y = "Count",
+       title = "Distribution of the Mean Symmetry by Diagnosis")
+
+```
+Symmetry has closer median values but malignant tissue has several outliers leading to a right skew in the distribution.
+
+#### Fractal Dimension
+```{r}
+# Basic distributions of these variables
+ggplot(df) + 
+  geom_histogram(aes(x = fractal_dimension_mean, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  geom_vline(data= stats_mean, aes(xintercept = mean_fractal_dimension, 
+                                    color = diagnosis), 
+             linetype = "dashed") + 
+  geom_vline(data= stats_mean, aes(xintercept = median_fractal_dimension, 
+                                    color = diagnosis), 
+             linetype = "solid") + 
+  labs(x = "Fractal Dimension (mean)", y = "Count",
+       title = "Distribution of the Mean Fractal Dimension by Diagnosis")
+```
+Both of these distributions are right skewed, but they are fairly close in terms of how they overal over each other. Transforming this feature might be a good idea to address the normality assumptions.
+
+```{r}
+corr_matrix <- df |> 
+  select(ends_with("_mean")) |> 
+  cor()
+
+corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
+```
+```{r}
+pairs(df[, c("radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean")])
+```
+
