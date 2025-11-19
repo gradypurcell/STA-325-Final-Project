@@ -273,4 +273,257 @@ ggplot(df) +
 ```
 Both of these distributions are right skewed, but they are fairly close in terms of how they overal over each other. Transforming this feature might be a good idea to address the normality assumptions.
 
+### Quantifying the distance of the worst from the mean
 
+```{r}
+# Building a dataframe to quantify the distance between the worst and the mean
+df <- df |>
+  mutate(
+    radius_worst_dist = radius_worst - radius_mean,
+    radius_worst_stand = radius_worst_dist / radius_se,
+    texture_worst_dist = texture_worst - texture_mean,
+    texture_worst_stand = texture_worst_dist / texture_se, 
+    perimeter_worst_dist = perimeter_worst - perimeter_mean,
+    perimeter_worst_stand = 
+      perimeter_worst_dist / perimeter_se,
+    area_worst_dist = area_worst - area_mean,
+    area_worst_stand = area_worst_dist / area_se, 
+    smoothness_worst_dist = 
+      smoothness_worst - smoothness_mean,
+    smoothness_worst_stand = 
+      smoothness_worst_dist / smoothness_se,
+    compactness_worst_dist = 
+      compactness_worst - compactness_mean,
+    compactness_worst_stand = 
+      compactness_worst_dist / compactness_se, 
+    concavity_worst_dist = 
+      concavity_worst - concavity_mean,
+    concavity_worst_stand = 
+     concavity_worst_dist / concavity_se,
+    concave.points_worst_dist = 
+      concave.points_worst - concave.points_mean,
+    concave.points_worst_stand = 
+      concave.points_worst_dist / concave.points_se, 
+    symmetry_worst_dist = 
+      symmetry_worst - symmetry_mean,
+    symmetry_stand = 
+      symmetry_worst_dist / symmetry_se, 
+    fractal_dimension_worst_dist = 
+       fractal_dimension_worst -  fractal_dimension_mean,
+    fractal_dimension_worst_stand = 
+       fractal_dimension_worst_dist /  fractal_dimension_se, 
+  )
+
+```
+
+# Visualizing Standard Error Boxplots
+
+#### Radius
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = radius_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Radius Distance (worst)", y = "Count",
+       title = "Distribution of the Radius Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = radius_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Radius Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Radius Standard Errors by Diagnosis")
+```
+#### Texture
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = texture_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Texture Distance (worst)", y = "Count",
+       title = "Distribution of the Texture Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = texture_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Texture Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Texture Standard Errors by Diagnosis")
+```
+
+#### Perimeter
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = perimeter_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Perimeter Distance (worst)", y = "Count",
+       title = "Distribution of the Perimeter Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = perimeter_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Perimeter Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Perimeter Standard Errors by Diagnosis")
+```
+
+#### Area
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = area_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Area Distance (worst)", y = "Count",
+       title = "Distribution of the Area Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = area_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Area Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Area Standard Errors by Diagnosis")
+```
+
+#### Smoothness
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = smoothness_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Smoothness Distance (worst)", y = "Count",
+       title = "Distribution of the Smoothness Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = smoothness_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Smoothness Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Smoothness Standard Errors by Diagnosis")
+```
+
+#### Compactness
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = compactness_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Compactness Distance (worst)", y = "Count",
+       title = "Distribution of the Compactness Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = compactness_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Compactness Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Compactness Standard Errors by Diagnosis")
+```
+
+#### Concavity
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = concavity_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Concavity Distance (worst)", y = "Count",
+       title = "Distribution of the Concavity Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = concavity_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Concavity Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Concavity Standard Errors by Diagnosis")
+```
+
+
+#### Concave Points
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = concave.points_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Concave Points Distance (worst)", y = "Count",
+       title = "Distribution of the Concave Points Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = concave.points_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Concave Points Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Concave Points Standard Errors by Diagnosis")
+```
+
+#### Symmetry
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = symmetry_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Symmetry Distance (worst)", y = "Count",
+       title = "Distribution of the Symmetry Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = symmetry_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Symmetry Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Symmetry Standard Errors by Diagnosis")
+```
+
+#### Fractal Dimension
+```{r}
+# Visualizing the distances
+ggplot(df) + 
+  geom_boxplot(aes(x = fractal_dimension_worst_dist, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Fractal Dimension Distance (worst)", y = "Count",
+       title = "Distribution of the Fractal Dimension Distance by Diagnosis")
+
+# Visualizing the standard errors
+ggplot(df) + 
+  geom_boxplot(aes(x = fractal_dimension_worst_stand, fill = diagnosis), alpha = 0.3) + 
+  theme_bw() + 
+  scale_fill_manual(values = pal, name = "Diagnosis") +
+  scale_color_manual(values = pal, guide = "none") + 
+  labs(x = "Fractal Dimension Standard Errors (worst)", y = "Count",
+       title = "Distribution of the Fractal Dimension Standard Errors by Diagnosis")
+```
