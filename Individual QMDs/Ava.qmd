@@ -7,7 +7,9 @@
 library(tidyverse)
 library(ggplot2)
 library(dplyr)
-
+library(caret)
+library(pROC)
+library(glmnet)
 
 # Loading the data
 df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
@@ -286,4 +288,127 @@ Both of these distributions are right skewed, but they are fairly close in terms
 
 
 
+###Predictions:
+Data Cleanup and CV Set up 
+```{r}
+#clean data
+df_knn <- df |> select(-X)
 
+# outcome must be a factor for caret + ROC
+df_knn$diagnosis <- factor(df_knn$diagnosis, levels = c("B", "M"))
+
+#train-split
+set.seed(325)
+train_index <- createDataPartition(df_knn$diagnosis, p = 0.8, list = FALSE)
+train <- df_knn[train_index, ]
+test  <- df_knn[-train_index, ]
+
+#normalize numeric predictors bc KNN requires scaling 
+preproc <- preProcess(train[, -2], method = c("center", "scale"))
+train_scaled <- predict(preproc, train[, -2])
+test_scaled  <- predict(preproc, test[, -2])
+
+#attach diagnosis back
+train_scaled$diagnosis <- train$diagnosis
+test_scaled$diagnosis  <- test$diagnosis
+```
+
+KNN Regression with 5 fold CV
+```{r}
+
+#set up 5-fold CV
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,    
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Train KNN with tuning
+set.seed(325)
+knn_fit <- train(
+  diagnosis ~ ., 
+  data = train_scaled,
+  method = "knn",
+  trControl = ctrl,
+  metric = "ROC",
+  tuneLength = 20
+)
+
+#best k
+knn_fit$bestTune
+plot(knn_fit)
+
+
+```
+Chooses k = 11 as the best number of neighbors. k = 11 produced the highest average ROC across the 5 CV folds. We will use this k value for our predictions. 
+
+Prediction on Test Set
+```{r}
+knn_probs <- predict(knn_fit, newdata = test, type = "prob")
+head(knn_probs)
+
+#pred class w .5 cutoff may want to change this 
+pred_class <- predict(knn_fit, newdata = test)
+
+
+#performance
+confusionMatrix(pred_class, test$diagnosis)
+roc_curve <- roc(response = test$diagnosis, predictor = knn_probs$M)
+auc(roc_curve)
+
+```
+The model’s predictive performance shows that while overall accuracy is 0.628, this is no better than the No Information Rate, meaning the model is essentially performing at chance and not outperforming a naive classifier that always predicts the majority class. The very high sensitivity (0.93) indicates the model correctly identifies most benign tumors, but the extremely low specificity (0.12) shows it almost never correctly identifies malignant tumors—an undesirable outcome in a cancer-detection setting where missing malignant cases is far more harmful than over-calling benign ones. The low Kappa value (0.058) further confirms that the agreement between predictions and true labels is barely above random. The ROC AUC of 0.624 suggests poor discriminative ability, meaning the model struggles to separate benign from malignant cases. Overall, this model demonstrates significant imbalance in classification performance and is not reliable for detecting malignant cancers. This model doesn't perform very well and it would require improved features, tuning, or a different modeling approach to be clinically meaningful. Raising the cutoff will change the distribution of errors, but it will not make the model good. It’ll just make it miss more benign cases while only slightly improving detection of malignant ones.
+
+
+
+
+###Interpretation 
+Lasso with 5-fold CV to find important predictors
+
+Data cleanup and preparation
+```{r}
+df_lasso <- df
+
+#convert diagnosis to a binary factor
+df_lasso$diagnosis_binary <- ifelse(df_lasso$diagnosis == "M", 1, 0)
+
+#remove non-predictor columns 
+predictors <- df_lasso |>
+  select(-id, -diagnosis, -X) 
+
+#separate predictors and response
+x <- as.matrix(predictors |> select(-diagnosis_binary))
+y <- df_lasso$diagnosis_binary
+```
+
+Run CV and Lasso
+```{r}
+
+# 5-fold CV
+set.seed(325)  
+cv_lasso <- cv.glmnet(x, y, 
+                      alpha = 1,          # alpha = 1 for LASSO
+                      family = "binomial",
+                      nfolds = 5,         
+                      type.measure = "class")
+
+best_lambda <- cv_lasso$lambda.min
+best_lambda
+
+#fit model w best
+lasso_model <- glmnet(x, y, alpha = 1, family = "binomial", lambda = best_lambda)
+
+#extract coefficients as a regular matrix
+coef_lasso <- as.matrix(coef(lasso_model))
+
+#filter for non-zero coefficients
+important_predictors <- coef_lasso[coef_lasso[,1] != 0, , drop = FALSE]
+
+#important predictors
+important_predictors
+
+
+```
+The lasso logistic regression model identifies a subset of features that are most influential in predicting whether a tumor is malignant or benign. Higher values of concave.points_mean (14.40) and concave.points_worst (16.61) strongly increase the predicted probability of malignancy, suggesting that tumors with more pronounced concave points are more likely to be malignant. Similarly, radius_se, texture_worst, smoothness_worst, concavity_worst, and symmetry_worst also have positive contributions, though smaller, indicating that variations in these measurements are associated with malignancy risk. fractal_dimension_se has a large negative coefficient (-90.18), implying that higher values strongly reduce the predicted probability of malignancy. Overall, these selected features provide an interpretable set of predictors that could be used to focus future models on the most diagnostically relevant tumor characteristics.
