@@ -241,3 +241,159 @@ ggroc(roc_obj_mwdiff, size = 1.1, color = "blue") +
 
 ```
 The difference seems to have the lowest ROC which is interesting...
+
+
+## Me trying to make the 3d tumor
+```{r}
+library(scatterplot3d)
+
+# Pick three predictors
+x <- data$radius_mean
+y <- data$texture_mean
+z <- data$compactness_mean
+
+# Color by diagnosis
+colors <- ifelse(data$diagnosis == "M", "red", "blue")
+
+scatterplot3d(x, y, z,
+              color = colors,
+              pch = 16,
+              xlab = "Radius Mean",
+              ylab = "Texture Mean",
+              zlab = "Compactness Mean",
+              main = "3D Visualization of Tumors")
+legend("topright", legend = c("Benign", "Malignant"),
+       col = c("blue", "red"), pch = 16)
+
+```
+
+```{r}
+library(plotly)
+
+# --- 1. Select tumor from data ---
+tumor_index <- 1  # choose which tumor
+tumor_radius <- data$radius_mean[tumor_index] / 10  # scale down for viz
+prob <- predict(logit_means, newdata = data[tumor_index, ], type = "response")
+
+# --- 2. Create a simplified female torso silhouette as an ellipsoid ---
+# We'll use two parts: torso (ellipsoid) + breast hemisphere
+
+# Torso ellipsoid
+u <- seq(0, 2*pi, length.out = 50)
+v <- seq(0, pi, length.out = 50)
+xt <- outer(cos(u), sin(v)) * 4     # x-radius ~4
+yt <- outer(sin(u), sin(v)) * 2.5   # y-radius ~2.5 (depth)
+zt <- outer(rep(1, length(u)), cos(v)) * 8  # height ~8
+
+# Breast hemisphere (one side)
+theta <- seq(0, 2*pi, length.out = 50)
+phi <- seq(0, pi/2, length.out = 50)  # half sphere
+xb <- outer(cos(theta), sin(phi)) * 2 + 2  # shift right for breast
+yb <- outer(sin(theta), sin(phi)) * 2
+zb <- outer(rep(1, length(theta)), cos(phi)) * 2 + 6  # attach on upper torso
+
+# --- 3. Create tumor sphere ---
+ttheta <- seq(0, 2*pi, length.out = 30)
+tphi <- seq(0, pi, length.out = 30)
+xs <- tumor_radius * outer(sin(tphi), cos(ttheta)) + (2 + tumor_radius * 0.2)
+ys <- tumor_radius * outer(sin(tphi), sin(ttheta)) + 0
+zs <- tumor_radius * outer(cos(tphi), rep(1, length(ttheta))) + 6
+
+# --- 4. Plot with plotly ---
+plot_ly() %>%
+  # Torso surface
+  add_surface(
+    x = ~xt, y = ~yt, z = ~zt,
+    surfacecolor = matrix(1, nrow = length(u), ncol = length(v)),
+    colorscale = list(c(0, 1), c("lightpink", "lightpink")),
+    opacity = 0.6,
+    showscale = FALSE
+  ) %>%
+  # Breast hemisphere
+  add_surface(
+    x = ~xb, y = ~yb, z = ~zb,
+    surfacecolor = matrix(1, nrow = length(theta), ncol = length(phi)),
+    colorscale = list(c(0, 1), c("lightpink", "lightpink")),
+    opacity = 0.8,
+    showscale = FALSE
+  ) %>%
+  # Tumor sphere
+  add_surface(
+    x = ~xs, y = ~ys, z = ~zs,
+    surfacecolor = matrix(prob, nrow = length(tphi), ncol = length(ttheta)),
+    colorscale = list(c(0, 1), c("blue", "red")),
+    showscale = TRUE
+  ) %>%
+  layout(
+    title = paste0("Breast Cancer Tumor Visualization\n(Malignancy Prob = ", round(prob, 3), ")"),
+    scene = list(
+      xaxis = list(title = "X"),
+      yaxis = list(title = "Y"),
+      zaxis = list(title = "Z"),
+      camera = list(eye = list(x = 1.5, y = 1.5, z = 1.2))
+    )
+  )
+
+```
+
+```{r}
+library(plotly)
+
+# -----------------------------
+# 1. Tumor data
+# -----------------------------
+tumor_index <- 1
+tumor_radius_mm <- data$radius_mean[tumor_index] * 10  # assume radius_mean in cm, convert to mm
+pred_prob <- predict(logit_means, newdata = data[tumor_index, ], type = "response")
+
+# Average adult breast radius in mm
+avg_breast_radius <- 120
+
+# Scale tumor relative to average breast
+tumor_radius_scaled <- tumor_radius_mm / avg_breast_radius * 5  # scale factor for visualization
+
+# -----------------------------
+# 2. Create breast hemisphere
+# -----------------------------
+theta <- seq(0, 2*pi, length.out = 50)
+phi <- seq(0, pi/2, length.out = 50)
+x_b <- outer(cos(theta), sin(phi)) * 5
+y_b <- outer(sin(theta), sin(phi)) * 5
+z_b <- outer(rep(1, length(theta)), cos(phi)) * 5
+
+# -----------------------------
+# 3. Create tumor sphere on top of breast
+# -----------------------------
+ttheta <- seq(0, 2*pi, length.out = 30)
+tphi <- seq(0, pi, length.out = 30)
+x_t <- tumor_radius_scaled * outer(sin(tphi), cos(ttheta)) + 0  # center x
+y_t <- tumor_radius_scaled * outer(sin(tphi), sin(ttheta)) + 0  # center y
+z_t <- tumor_radius_scaled * outer(cos(tphi), rep(1,length(ttheta))) + 3  # slightly above breast
+
+# -----------------------------
+# 4. Plot
+# -----------------------------
+plot_ly() %>%
+  # Breast hemisphere
+  add_surface(x = ~x_b, y = ~y_b, z = ~z_b,
+              surfacecolor = matrix(1, nrow=50, ncol=50),
+              colorscale = list(c(0,1), c("pink","pink")),
+              opacity = 0.6,
+              showscale = FALSE) %>%
+  # Tumor sphere
+  add_surface(x = ~x_t, y = ~y_t, z = ~z_t,
+              surfacecolor = matrix(pred_prob, nrow=30, ncol=30),
+              colorscale = list(c(0,1), c("blue","red")),
+              showscale = TRUE) %>%
+  layout(title = paste0(
+    "Tumor relative to average woman breast\nPredicted Prob = ", 
+    round(pred_prob,3)),
+         scene = list(xaxis=list(title="X"),
+                      yaxis=list(title="Y"),
+                      zaxis=list(title="Z"),
+                      camera=list(eye=list(x=1.5,y=1.5,z=1.2))))
+
+```
+
+
+
