@@ -1,0 +1,243 @@
+
+
+## Data Upload + Libraries
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+library(knitr)
+library(stats)
+library(readr)
+library(dplyr)
+library(pROC)
+library(caret)
+
+data <- read.csv("data.csv")
+
+```
+## Logistic Models
+### Odds for Benign vs Malignant
+#### Making M and B into numeric values to make logistic work
+
+### MEANS
+```{r}
+# M = 1, meaning malignant is closer to 1
+data$diagnosis_num <- ifelse(data$diagnosis == "M", 1, 0)
+
+logit_means <- glm(diagnosis_num ~ radius_mean + 
+                     texture_mean + smoothness_mean
+                   + compactness_mean + symmetry_mean,
+                 data = data,
+                 family = binomial)
+tidy(logit_means)
+
+
+
+```
+
+
+```{r}
+## RAW WITHOUT TEST TRAIN SPLIT
+# predicted probability of M
+data$pred_prob_means <- predict(logit_means, type = "response")
+
+# predicted class using 0.5 threshold
+data$pred_class_means <- ifelse(data$pred_prob_means > 0.5, "M", "B")
+data$pred_class_means <- factor(data$pred_class_means, levels = c("B", "M"))
+
+# confusion matrix
+table(Predicted = data$pred_class_means, Actual = data$diagnosis)
+
+
+```
+
+```{r}
+## ADDING TEST TRAIN SPLIT
+
+set.seed(325)
+
+train_idx <- sample(1:nrow(data), 0.7 * nrow(data))
+train <- data[train_idx, ]
+test  <- data[-train_idx, ]
+
+train_acc <- mean(train$pred_class_means == train$diagnosis_num)
+test_acc  <- mean(test$pred_class_means == test$diagnosis_num)
+
+train_acc
+test_acc
+
+
+```
+IDK what's going on here I'm ngl
+
+```{r}
+
+auc_train <- roc(train$diagnosis_num, train$pred_prob_means)$auc
+auc_test  <- roc(test$diagnosis_num, test$pred_prob_means)$auc
+
+auc_train
+auc_test
+
+roc_obj_means <- roc(test$diagnosis_num, test$pred_prob_means)
+
+ggroc(roc_obj_means, size = 1.1, color = "blue") +
+  ggtitle(paste("ROC Curve (AUC =", round(roc_obj_means$auc, 3), ")")) +
+  theme_minimal(base_size = 14)
+
+```
+
+```{r}
+# testing importance of each predictor
+
+varImp(logit_means, scale = TRUE)
+```
+I added in area with radius just to see what would happen and it actual had more type 2 errors than when it was just radius which I found to be interesting. It also made radius MUCH less important which makes sense since they are related. Also, when I switched out area and radius, it increased type 2 error and decreased type 1 error. This could be interesting to see when looking at resources a hospital has.
+
+
+
+### WORST
+
+
+```{r}
+logit_worst <- glm(diagnosis_num ~ radius_worst + 
+                     texture_worst + smoothness_worst
+                   + compactness_worst + symmetry_worst,
+                 data = data,
+                 family = binomial)
+tidy(logit_worst)
+```
+
+
+
+```{r}
+## RAW WITHOUT TEST TRAIN SPLIT
+# predicted probability of M
+data$pred_prob_worst <- predict(logit_worst, type = "response")
+
+# predicted class using 0.5 threshold
+data$pred_class_worst <- ifelse(data$pred_prob_worst > 0.5, "M", "B")
+data$pred_class_worst <- factor(data$pred_class_worst, levels = c("B", "M"))
+
+# confusion matrix
+table(Predicted = data$pred_class_worst, Actual = data$diagnosis)
+
+
+```
+
+```{r}
+## ADDING TEST TRAIN SPLIT
+
+set.seed(325)
+
+train_idx <- sample(1:nrow(data), 0.7 * nrow(data))
+train <- data[train_idx, ]
+test  <- data[-train_idx, ]
+
+train_acc <- mean(train$pred_class_worst == train$diagnosis_num)
+test_acc  <- mean(test$pred_class_worst == test$diagnosis_num)
+
+train_acc
+test_acc
+
+
+```
+IDK what's going on here I'm ngl
+
+```{r}
+
+auc_train <- roc(train$diagnosis_num, train$pred_prob_worst)$auc
+auc_test  <- roc(test$diagnosis_num, test$pred_prob_worst)$auc
+
+auc_train
+auc_test
+
+roc_obj_worst <- roc(test$diagnosis_num, test$pred_prob_worst)
+
+ggroc(roc_obj_worst, size = 1.1, color = "blue") +
+  ggtitle(paste("ROC Curve (AUC =", round(roc_obj_worst$auc, 3), ")")) +
+  theme_minimal(base_size = 14)
+
+```
+
+```{r}
+# testing importance of each predictor
+
+varImp(logit_worst, scale = TRUE)
+```
+Radius seems to continue to be the best predictor; going to test radius worst vs radius mean
+
+### DIFFERENCE BETWEEN MEANS AND WORST
+
+```{r}
+data$radius_mwdiff <- data$radius_mean - data$radius_worst
+data$texture_mwdiff <- data$radius_mean - data$radius_worst
+data$smoothness_mwdiff <- data$smoothness_mean - data$smoothness_worst
+data$compactness_mwdiff <- data$compactness_mean - data$compactness_worst
+data$symmetry_mwdiff <- data$symmetry_mean - data$symmetry_worst
+
+```
+
+## Model
+```{r}
+logit_mwdiff <- glm(diagnosis_num ~ radius_mwdiff + 
+                     texture_mwdiff + smoothness_mwdiff
+                   + compactness_mwdiff + symmetry_mwdiff,
+                 data = data,
+                 family = binomial)
+tidy(logit_mwdiff)
+```
+
+
+```{r}
+
+## RAW WITHOUT TEST TRAIN SPLIT
+# predicted probability of M
+data$pred_prob_mwdiff <- predict(logit_mwdiff, type = "response")
+
+# predicted class using 0.5 threshold
+data$pred_class_mwdiff <- ifelse(data$pred_prob_mwdiff > 0.5, "M", "B")
+data$pred_class_mwdiff <- factor(data$pred_class_mwdiff, levels = c("B", "M"))
+
+# confusion matrix
+table(Predicted = data$pred_class_mwdiff, Actual = data$diagnosis)
+
+
+```
+
+
+
+```{r}
+## ADDING TEST TRAIN SPLIT
+
+set.seed(325)
+
+train_idx <- sample(1:nrow(data), 0.7 * nrow(data))
+train <- data[train_idx, ]
+test  <- data[-train_idx, ]
+
+train_acc <- mean(train$pred_class_mwdiff == train$diagnosis_num)
+test_acc  <- mean(test$pred_class_mwdiff == test$diagnosis_num)
+
+train_acc
+test_acc
+
+
+```
+IDK what's going on here I'm ngl
+
+```{r}
+
+auc_train <- roc(train$diagnosis_num, train$pred_prob_mwdiff)$auc
+auc_test  <- roc(test$diagnosis_num, test$pred_prob_mwdiff)$auc
+
+auc_train
+auc_test
+
+roc_obj_mwdiff <- roc(test$diagnosis_num, test$pred_prob_mwdiff)
+
+ggroc(roc_obj_mwdiff, size = 1.1, color = "blue") +
+  ggtitle(paste("ROC Curve (AUC =", round(roc_obj_mwdiff$auc, 3), ")")) +
+  theme_minimal(base_size = 14)
+
+```
+The difference seems to have the lowest ROC which is interesting...
