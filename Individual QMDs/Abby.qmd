@@ -1,0 +1,165 @@
+
+```{r}
+library(here)
+library(glmnet)
+data <- read.csv(here("Data", "data.csv"))
+
+# remove column X - irrelevant to analyses
+data <- data %>% select(-X)
+
+df <- data.frame(data)
+
+```
+
+## Lasso-Penalized Logistic Regression
+
+```{r}
+# 1 = malignant, 0 = benign
+df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
+
+log_model <- glm(diagnosis ~ ., data = df, family = binomial)
+
+# summary(log_model)
+# using all 30 predictors -> multicollinearity
+
+# instead use LASSO regression to actually perform variable selection 
+
+df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
+
+X <- model.matrix(diagnosis ~ ., data = df)[, -1]
+y <- df$diagnosis
+
+set.seed(123) 
+n <- nrow(X)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_idx, ]
+X_test  <- X[-train_idx, ]
+y_train <- y[train_idx]
+y_test  <- y[-train_idx]
+
+cvfit <- cv.glmnet(
+  x = X_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,        # LASSO
+  nfolds = 5        # 5-fold CV
+)
+
+plot(cvfit) 
+
+prob_test <- predict(cvfit, newx = X_test, s = "lambda.min", type = "response")
+
+# Turn into class predictions
+pred_test <- ifelse(prob_test > 0.5, 1, 0)
+
+# evaluate diff thresholds to reduce chances of false negatives
+# threshold <- 0.3
+# pred_test_adj <- ifelse(prob_test > threshold, 1, 0)
+
+# table(pred_test_adj, y_test)
+
+# Accuracy
+mean(pred_test == y_test)
+
+# 98% accuracy on test data
+```
+
+```{r}
+# showing which predictors are the most important
+
+coef(cvfit, s = "lambda.min")
+
+# computing the confusion matrix
+
+table(pred_test, y_test)
+```
+
+Based on the LASSO regression, the model predicted 1 false negative: gave 0 (benign) when the actual was malignant (1). 
+
+Predictors that are the most telling: 
+The strongest ones that increase the log odds of a tumor being malignant- 
+- concave points mean, smoothness_se
+The strongest ones that decrease the log odds of tumor being malignant (more likely to be benign)
+- compactness mean, fractal dimension se, compactness se
+
+Malignant tumors tend to have more irregular, concave, asymmetric nuclei; worse ones have more abnormalities and there's high variation 
+Benign tumors tend to be more uniform and have lower fractal dimension variability
+
+## Classification Trees
+
+```{r}
+library(rpart)
+
+df2 <- read.csv("data.csv")
+
+# 2. Remove ID and empty column
+df2 <- df2[ , !names(df) %in% c("id", "Unnamed..32") ]
+
+
+df$diagnosis <- factor(df2$diagnosis, levels = c("B", "M"))
+
+```
+
+```{r}
+set.seed(123)
+n <- nrow(df)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+train <- df[train_idx, ]
+test  <- df[-train_idx, ]
+
+tree_model <- rpart(
+  diagnosis ~ .,
+  data = train,
+  method = "class",
+  control = rpart.control(cp = 0.01)   # complexity parameter
+)
+
+# evaluate accuracy of tree on testing data
+
+pred <- predict(tree_model, newdata = test, type = "class")
+
+cm <- table(Predicted = pred, Actual = test$diagnosis)
+cm
+
+accuracy <- sum(diag(cm)) / sum(cm)
+accuracy
+# 92% accuracy
+```
+Could try pruning the tree for even better accuracy
+
+## Bagging 
+
+```{r}
+library(randomForest)
+
+bag_model <- randomForest(
+  diagnosis ~ ., 
+  data = train,
+  mtry = ncol(train) - 1,   # mtry = all predictors = bagging
+  ntree = 500
+)
+
+bag_pred <- predict(bag_model, test)
+mean(bag_pred == test$diagnosis)
+```
+96% accuracy with bagging- which is higher
+
+## Random Forests
+- should provide an improvement over bagged trees as it decorrelates them and reduces variance 
+
+```{r}
+rf_model <- randomForest(
+  diagnosis ~ ., 
+  data = train,
+  mtry = sqrt(ncol(train) - 1), 
+  ntree = 500,
+  importance = TRUE
+)
+
+rf_pred <- predict(rf_model, test)
+mean(rf_pred == test$diagnosis)
+
+```
+Gives accuracy of ~95%
