@@ -1,5 +1,15 @@
 # Ava's QMD Work
 
+###Intro and Problem Framework
+#Project Goals
+The primary goal of our project is to build an interpretable machine learning model that can assess whether a breast mass is benign or malignant using measurable characteristics such as radius, area, smoothness, and concavity extracted from digitized medical images. Our analysis has two complementary aims: prediction, where we train a classifier to estimate the probability that a new mass is malignant, and inference, where we identify and interpret the features that have the greatest influence on these probability assignments. Because our target audience includes clinicians, researchers, and individuals without a technical background, we emphasize transparency and interpretability, focusing not only on whether the model predicts accurately, but also on why it arrives at its predictions. The project will also address relevant challenges, including potential noise in the imaging-derived features, limitations of an older dataset, and the need for models that doctors can trust when making time-sensitive decisions.
+
+#Importance and Relevance
+Given that breast cancer is the second most common cancer among women, accounting for roughly 30% of all new female cancer cases each year, and the second leading cause of cancer-related death in women, our findings have significant implications for early detection and treatment. As incidence rates continue to rise by about 1% annually, improving methods for identifying malignant tumors early is essential. Enhancing early cancer detection directly affects patient outcomes, treatment choices, and healthcare planning. By identifying which features—such as radius, texture, or concavity—are most associated with malignant masses, we provide insights that can guide research, improve clinical understanding, and inspire better diagnostic tools using modern imaging. Furthermore, early and accurate assessment of breast masses plays a critical role in determining appropriate treatment paths, including whether surgical intervention is needed and how urgent it may be. While medical imaging technology has advanced significantly since this dataset was collected, our project provides a proof-of-concept for how interpretable machine learning techniques can support clinical decision-making. By identifying the most influential features associated with malignancy, our model can help highlight the visual and structural characteristics that matter most with insights that can not only guide preliminary diagnostic judgments but also deepen understanding of factors associated with cancerous tissue. Importantly, this work demonstrates how data-driven tools can complement, not replace, medical expertise as a doctor must understand and trust a model before using it in practice. Even with its limitations, our modeling framework remains highly relevant today and can be extended or retrained on more modern, higher-resolution imaging data to support future innovations in surgical planning, triage, and diagnostic support.
+
+
+
+
 ## Reading in the Data
 
 ```{r}
