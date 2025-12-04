@@ -11,6 +11,7 @@ library(dplyr)
 
 # Loading the data
 df <- read.csv("data.csv")
+df <- df[, -33]
 ```
 
 ## EDA for Mean
@@ -279,4 +280,82 @@ corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
 ```{r}
 pairs(df[, c("radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean")])
 ```
+
+
+SUPPORT VECTOR MACHINES
+
+
+```{r}
+#install.packages('e1071') 
+#install.packages('caTools')
+#install.packages('ggplot2')
+#install.packages('caret')
+
+library(caret)
+library(e1071) 
+library(caTools)
+library(ggplot2)
+```
+
+```{r}
+#update.packages("caTools", checkBuilt = TRUE)
+```
+
+
+
+```{r}
+library(caTools)
+set.seed(123)
+split <- sample.split(df, SplitRatio = 0.8)
+training <- subset(df, split == TRUE)
+test <- subset(df, split == FALSE)
+
+training$diagnosis <- as.factor(training$diagnosis)
+test$diagnosis <- as.factor(test$diagnosis)
+
+
+X_train = training[,-2]
+y_train = training[,2]
+X_test = test[,-2]
+y_test = test[,2]
+classifier <- svm(diagnosis ~ ., data = training, type = 'C-classification', kernel = 'radial', gamma = 0.1)
+y_pred <- predict(classifier, newdata = test)
+
+table(test$diagnosis, y_pred)
+
+accuracy <- sum(diag(table(test$diagnosis, y_pred))) / sum(table(test$diagnosis, y_pred))
+cat("Accuracy: ", accuracy)
+
+confusionMatrix(table(test$diagnosis, y_pred))
+```
+```{r}
+classifier
+```
+
+```{r}
+log_model <- glm(diagnosis ~ ., 
+                 data = training, 
+                 family = binomial)
+
+# Predictions (probabilities)
+prob_pred <- predict(log_model, newdata = test, type = "response")
+
+# Convert probabilities → class labels (assumes "M" = positive class)
+y_pred <- ifelse(prob_pred > 0.5, "M", "B")
+y_pred <- factor(y_pred, levels = levels(test$diagnosis))
+
+# Confusion matrix
+cm <- table(test$diagnosis, y_pred)
+print(cm)
+
+# Accuracy
+accuracy <- sum(diag(cm)) / sum(cm)
+cat("Accuracy:", accuracy, "\n")
+
+# caret confusion matrix (better stats)
+confusionMatrix(y_pred, test$diagnosis)
+```
+
+
+The Breast Cancer Wisconsin (Diagnostic) Data Set describes characteristics of the cell nuclei of breast masses. The dataset consists of the mean, standard error and "worst" or largest of these features for these 10 features computred from each image: radium, texture, permimeter, area, smoothness, compactness, concavity, concave points, symmetry, and fractal dimension. The radius is the mean of distances from center to points along the perimeter. Texture is the stadnard deviation of gray-scale values). Perimeter measures the distance along the outside of the mass. Area measures how big the mass is. Smoothness is the local variation in radius lengths. Compactness is caclulated by perimeter^2/area - 1, respresenting how dense or elongated the mass is. Concavity is the severity of concave portions of the contour. Concave points is the number of concave portions of the contour. Symmetry is measured ??. Fractal dimension represents the roughness or complexity of the shape and is calculated by the "coastline approximation" -1. We use the ID number as identificaiton and the diagnosis is either M (malignant) or B (benign) and is our response variable. There are 569 observations, with 357 benign and 212 malignant. (mention how the numbers are okay), and there was no missing data to deal with. 
 
