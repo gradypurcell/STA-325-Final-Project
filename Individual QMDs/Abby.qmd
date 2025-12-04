@@ -2,6 +2,8 @@
 ```{r}
 library(here)
 library(glmnet)
+library(dplyr)
+
 data <- read.csv(here("Data", "data.csv"))
 
 # remove column X - irrelevant to analyses
@@ -63,7 +65,57 @@ pred_test <- ifelse(prob_test > 0.5, 1, 0)
 mean(pred_test == y_test)
 
 # 98% accuracy on test data
+
 ```
+
+
+```{r}
+# determining thresholds
+
+library(caret)
+
+evaluate_threshold <- function(prob, truth, threshold) {
+  pred <- ifelse(prob > threshold, 1, 0)
+  cm <- confusionMatrix(
+    factor(pred, levels = c(0,1)),
+    factor(truth, levels = c(0,1)),
+    mode = "everything"
+  )
+  tibble(
+    threshold = threshold,
+    accuracy = cm$overall["Accuracy"],
+    sensitivity = cm$byClass["Sensitivity"],   # True Positive Rate
+    specificity = cm$byClass["Specificity"],   # True Negative Rate
+    fn = cm$table["1","0"],  # False negatives: predicted benign, truth malignant
+    fp = cm$table["0","1"]   # False positives
+  )
+}
+
+thresholds <- seq(0.05, 0.50, by = 0.01)
+
+results <- bind_rows(
+  lapply(thresholds, evaluate_threshold, prob = prob_test, truth = y_test)
+)
+
+print(results)
+
+best <- results %>% filter(sensitivity >= 0.95) %>% slice(1)
+best
+```
+Most ideal threshold = 0.19
+Still maintains an accuracy of 97% with sensitivity of 95%
+
+```{r}
+threshold <- 0.19
+pred_test_adj <- ifelse(prob_test > threshold, 1, 0)
+
+confusionMatrix(
+  factor(pred_test_adj, levels = c(0,1)),
+  factor(y_test, levels = c(0,1)),
+  mode = "everything"
+)
+```
+
 
 ```{r}
 # showing which predictors are the most important
@@ -85,6 +137,40 @@ The strongest ones that decrease the log odds of tumor being malignant (more lik
 
 Malignant tumors tend to have more irregular, concave, asymmetric nuclei; worse ones have more abnormalities and there's high variation 
 Benign tumors tend to be more uniform and have lower fractal dimension variability
+
+## EDA for Lasso Regression Model
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+
+df_long <- df %>%
+  pivot_longer(cols = -diagnosis, names_to = "variable", values_to = "value")
+
+ggplot(df_long, aes(value)) +
+  geom_histogram(bins = 30, fill = "gray70", color = "black") +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Distribution of Predictor Variables") +
+  theme_minimal()
+
+```
+
+
+```{r}
+library(corrplot)
+corr_matrix <- cor(df %>% select(-diagnosis))
+
+corrplot(corr_matrix,
+         method = "color",
+         tl.cex = 0.6,
+         number.cex = 0.5,
+         title = "Correlation Heatmap of Predictors",
+         mar=c(0,0,2,0))
+```
+
+Interpretation of this plot: Strong patterns of correlation and multicollinearity in the data. As seen in the top left block for "mean", the variables (radius_mean, texture_mean, perimeter_mean, area_mean, compactness_mean, concavity_mean, concave.points_mean) are strongly correlated b/n 0.7-0.9 as indicated by the dark blue color. Lasso will probably select only a few predictors from this cluster and shrink the rest of the coefficients to zero due to redudancy. For "se", seem to be moderately correlated. For "worst", strongest correlations appear near the bottom right for variables radius_worst, area_worst, concavity, concave.points, and perimeter. 
+
+
 
 ## Classification Trees
 
