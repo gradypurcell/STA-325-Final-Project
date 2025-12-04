@@ -7,16 +7,135 @@
 library(tidyverse)
 library(ggplot2)
 library(dplyr)
+library(class)
+library(caret)
+library(pROC)
 
 
 # Loading the data
 df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+df <- df |>
+  select(-X)
 ```
 
 ## EDA for Worst
 
 Worst: mean of the three largest values (mean of the "outliers")
 - Will give an idea of how far the mean of the largest values are from the true mean
+
+## Building the KNN Model
+
+
+```{r}
+# Building the basic KNN Model
+set.seed(325)
+
+# Train/test split
+train_idx <- createDataPartition(df$diagnosis, p = 0.7, list = FALSE)
+train <- df[train_idx, ]
+test <- df[-train_idx, ]
+
+# trainControl: repeated CV, keep class probs for ROC
+ctrl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Grid of odd k values to try
+kgrid <- expand.grid(k = seq(1, 25, by = 2))
+
+# Fitting the model
+knn_fit <- train(
+  diagnosis ~ .,
+  data = train,
+  method = "knn",
+  tuneGrid = kgrid,
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+  metric = "ROC"
+)
+
+print(knn_fit)
+plot(knn_fit)
+
+```
+
+```{r}
+# Building the best model
+best_k <- knn_fit$bestTune$k
+cat("Best k:", best_k, "\n")
+```
+```{r}
+# Predict on test set (class + prob)
+pred_class <- predict(knn_fit, newdata = test)
+pred_prob  <- predict(knn_fit, newdata = test, type = "prob")[, "M"]
+
+# Refactoring the actual data
+test_actual <- factor(test$diagnosis, levels = c("B","M"))
+
+# Confusion matrix (use "yes" as positive)
+conf <- confusionMatrix(pred_class, test_actual, positive = "M")
+print(conf)
+
+
+```
+
+```{r}
+# ROC / AUC
+roc_obj <- roc(response = test$diagnosis, predictor = pred_prob, levels = c("B", "M"))
+auc_val <- auc(roc_obj)
+cat("Test AUC:", round(auc_val, 4), "\n")
+
+# Optional: plot ROC
+plot(roc_obj, main = paste("ROC curve (AUC =", round(auc_val,3), ")"))
+```
+
+I'm a little skeptical that this is too good of a model for the problem especially since the confusion matrix shows 100% accuracy with its predictions. 
+
+## Getting a PCA Visual for the predictors
+```{r}
+# Getting the numeric columns
+numeric_columns <- names(df)[sapply(df, is.numeric)]
+numeric_columns <- setdiff(numeric_columns, c("diagnosis", "id"))
+
+# PCA on training data
+pca_model <- prcomp(train[, numeric_columns], scale. = TRUE)
+
+train_pca <- data.frame(
+  PC1 = pca_model$x[,1],
+  PC2 = pca_model$x[,2],
+  diagnosis = train$diagnosis
+)
+```
+
+Note: this is fitting a different KNN model than the one that was tested above
+```{r}
+# Fit KNN in PCA space
+train_x <- train_pca[, 1:2]
+
+# Grid for visualization
+x_range <- seq(min(train_x$PC1)-1, max(train_x$PC1)+1, length.out=200)
+y_range <- seq(min(train_x$PC2)-1, max(train_x$PC2)+1, length.out=200)
+grid <- expand.grid(PC1=x_range, PC2=y_range)
+
+grid_pred <- knn(train = train_x, test = grid, cl = train_pca$diagnosis, k = 5)
+
+grid$pred <- grid_pred
+
+# Plot
+ggplot() +
+  geom_tile(data = grid, 
+            aes(PC1, PC2, fill = pred),
+            alpha=0.35) +
+  geom_point(data = train_pca, aes(PC1, PC2, color = diagnosis), size=2) +
+  theme_minimal() +
+  ggtitle("KNN Decision Boundary in PCA Space")
+```
+
 
 ### Table Comparing Benign vs Malignant
 ```{r}
@@ -306,7 +425,7 @@ df <- df |>
       concave.points_worst_dist / concave.points_se, 
     symmetry_worst_dist = 
       symmetry_worst - symmetry_mean,
-    symmetry_stand = 
+    symmetry_worst_stand = 
       symmetry_worst_dist / symmetry_se, 
     fractal_dimension_worst_dist = 
        fractal_dimension_worst -  fractal_dimension_mean,
@@ -527,3 +646,4 @@ ggplot(df) +
   labs(x = "Fractal Dimension Standard Errors (worst)", y = "Count",
        title = "Distribution of the Fractal Dimension Standard Errors by Diagnosis")
 ```
+
