@@ -10,13 +10,238 @@ library(dplyr)
 library(class)
 library(caret)
 library(pROC)
+library(glmnet)
+
 
 
 # Loading the data
 df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
-df <- df |>
-  select(-X)
+#df <- df |>
+#  select(-X)
+
+data <- df %>% select(-X)
+
+df <- data.frame(data)
 ```
+
+## Interaction Terms
+From Laura's code to get the interactions
+```{r}
+corr_matrix <- df |> 
+  select(ends_with("_mean")) |> 
+  cor()
+
+corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
+```
+
+```{r}
+corr_matrix
+
+```
+
+## Lasso without interactions
+```{r}
+
+# Loading the data
+df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+#df <- df |>
+#  select(-X)
+
+data <- df %>% select(-X)
+
+df <- data.frame(data)
+# 1 = malignant, 0 = benign
+df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
+
+# Use LASSO for variable selection
+df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
+
+X <- model.matrix(diagnosis ~ ., data = df)[, -1]
+y <- df$diagnosis
+
+set.seed(123) 
+n <- nrow(X)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_idx, ]
+X_test  <- X[-train_idx, ]
+y_train <- y[train_idx]
+y_test  <- y[-train_idx]
+
+cvfit <- cv.glmnet(
+  x = X_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,        # LASSO
+  nfolds = 5        # 5-fold CV
+)
+
+plot(cvfit) 
+print(cvfit$lambda.min)
+
+prob_test <- predict(cvfit, newx = X_test, s = "lambda.min", type = "response")
+
+# Turn into class predictions
+pred_test <- ifelse(prob_test > 0.5, 1, 0)
+
+# evaluate diff thresholds to reduce chances of false negatives
+# threshold <- 0.3
+# pred_test_adj <- ifelse(prob_test > threshold, 1, 0)
+
+# table(pred_test_adj, y_test)
+
+# Accuracy
+mean(pred_test == y_test)
+
+# 98% accuracy on test data
+```
+
+Getting the coefficients which are in the lasso model. 
+```{r}
+coef_min <- coef(cvfit, s = "lambda.min")
+coef_df <- as.data.frame(as.matrix(coef_min))
+coef_df$feature <- rownames(coef_df)
+names(coef_df)[1] <- "coefficient"
+
+# Filtering for coefficients which aren't 0
+coef_df |>
+  filter(coefficient > 0) 
+```
+
+
+```{r}
+# predicted probabilities (logistic) at lambda.min
+prob_test <- predict(cvfit, newx = X_test, s = "lambda.min", type = "response")
+# convert to numeric vector
+prob_test <- as.numeric(prob_test)
+
+# default threshold 0.5 -> predicted class
+## THIS IS WHERE WE CHANGE THRESHOLD
+pred_class <- ifelse(prob_test >= 0.5, 1, 0)
+
+```
+
+```{r}
+# AUC
+roc_obj <- roc(y_test, prob_test)
+auc_val <- auc(roc_obj)
+print(auc_val)
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)))
+
+# confusion matrix at threshold 0.5
+table(Predicted = pred_class, Actual = y_test)
+
+# other metrics
+accuracy <- mean(pred_class == y_test)
+sens <- sum(pred_class == 1 & y_test == 1) / sum(y_test == 1)
+spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
+c(accuracy = accuracy, sensitivity = sens, specificity = spec)
+
+```
+Code for choosing an optimal threshold using the Youden index:
+```{r}
+coords <- coords(roc_obj, "best", ret = c("threshold","sensitivity","specificity"), best.method = "youden")
+coords
+```
+## Lasso Logistic with Interaction Terms
+Now, the interaction terms using just the significant terms from above will be added.
+```{r}
+# Extracing the relevant features to use as interactions
+selected_features <- coef_df |>
+  filter(coefficient > 0) |>
+  pull(feature)
+
+selected_features
+
+```
+
+```{r}
+
+# Use LASSO for variable selection
+df2 <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
+df2 <- df2[ , names(df2) %in% c(selected_features, "diagnosis")]
+
+X <- model.matrix(diagnosis ~ (.)^2, data = df2)[, -1] # adding interactions
+y <- df$diagnosis
+
+set.seed(123) 
+n <- nrow(X)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_idx, ]
+X_test  <- X[-train_idx, ]
+y_train <- y[train_idx]
+y_test  <- y[-train_idx]
+
+cvfit2 <- cv.glmnet(
+  x = X_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,        # LASSO
+  nfolds = 5        # 5-fold CV
+)
+
+plot(cvfit2) 
+print(cvfit2$lambda.min)
+
+prob_test <- predict(cvfit2, newx = X_test, s = "lambda.min", type = "response")
+
+# Turn into class predictions
+pred_test <- ifelse(prob_test > 0.5, 1, 0)
+
+# evaluate diff thresholds to reduce chances of false negatives
+# threshold <- 0.3
+# pred_test_adj <- ifelse(prob_test > threshold, 1, 0)
+
+# table(pred_test_adj, y_test)
+
+# Accuracy
+mean(pred_test == y_test)
+
+# 98% accuracy on test data
+```
+```{r}
+# Extracting the coefficients in the lasso model
+coef_min2 <- coef(cvfit2, s = "lambda.min")
+coef_df2 <- as.data.frame(as.matrix(coef_min2))
+coef_df2$feature <- rownames(coef_df2)
+names(coef_df2)[1] <- "coefficient"
+
+# Filtering for coefficients which aren't 0
+coef_df2 |>
+  filter(coefficient > 0) 
+```
+## Hierarchical Logistic Lasso Model
+```{r}
+# install.packages("glinternet")
+library(glinternet)
+
+# X must be a numeric matrix; categorical variables require specifying numLevels
+X <- model.matrix(diagnosis ~ (.)^2, data = df2)[, -1] # adding interactions
+y <- df$diagnosis
+
+numLevels <- rep(1, ncol(X))  # 1 = numeric, >1 = categorical levels
+
+fit <- glinternet(X, y, numLevels = numLevels, family = "binomial")
+
+summary(fit)
+coef(fit, s = "lambda.min")
+
+
+```
+
+
+
+## Decision Tree
+```{r}
+
+
+```
+
+
+Interactions:
+- Worst: all involved fractal dimension which isn't considered significant in our model
+- 
 
 ## EDA for Worst
 
