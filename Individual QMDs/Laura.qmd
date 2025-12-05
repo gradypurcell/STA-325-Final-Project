@@ -333,6 +333,33 @@ classifier
 ```
 
 ```{r}
+library(caTools)
+set.seed(123)
+split <- sample.split(df, SplitRatio = 0.8)
+training <- subset(df, split == TRUE)
+test <- subset(df, split == FALSE)
+
+training$diagnosis <- as.factor(training$diagnosis)
+test$diagnosis <- as.factor(test$diagnosis)
+
+
+X_train = training[,-2]
+y_train = training[,2]
+X_test = test[,-2]
+y_test = test[,2]
+classifier <- svm(diagnosis ~ .^2, data = training, type = 'C-classification', kernel = 'radial', gamma = 0.1)
+y_pred <- predict(classifier, newdata = test)
+
+table(test$diagnosis, y_pred)
+
+accuracy <- sum(diag(table(test$diagnosis, y_pred))) / sum(table(test$diagnosis, y_pred))
+cat("Accuracy: ", accuracy)
+
+confusionMatrix(table(test$diagnosis, y_pred))
+```
+
+
+```{r}
 log_model <- glm(diagnosis ~ ., 
                  data = training, 
                  family = binomial)
@@ -353,6 +380,56 @@ accuracy <- sum(diag(cm)) / sum(cm)
 cat("Accuracy:", accuracy, "\n")
 
 # caret confusion matrix (better stats)
+confusionMatrix(y_pred, test$diagnosis)
+```
+
+```{r}
+log_model <- glm(diagnosis ~ .^2, 
+                 data = training, 
+                 family = binomial)
+
+# Predictions (probabilities)
+prob_pred <- predict(log_model, newdata = test, type = "response")
+
+# Convert probabilities → class labels (assumes "M" = positive class)
+y_pred <- ifelse(prob_pred > 0.5, "M", "B")
+y_pred <- factor(y_pred, levels = levels(test$diagnosis))
+
+# Confusion matrix
+cm <- table(test$diagnosis, y_pred)
+print(cm)
+
+# Accuracy
+accuracy <- sum(diag(cm)) / sum(cm)
+cat("Accuracy:", accuracy, "\n")
+
+# caret confusion matrix (better stats)
+confusionMatrix(y_pred, test$diagnosis)
+```
+
+```{r}
+library(randomForest)
+library(caret)
+
+# Fit random forest (NO family=binomial)
+rf_model <- randomForest(diagnosis ~ ., data = training)
+
+# Predict probabilities for class "M" (positive class)
+prob_pred <- predict(rf_model, newdata = test, type = "prob")[, "M"]
+
+# Convert probabilities to class labels
+y_pred <- ifelse(prob_pred > 0.5, "M", "B")
+y_pred <- factor(y_pred, levels = levels(test$diagnosis))
+
+# Confusion matrix
+cm <- table(Actual = test$diagnosis, Predicted = y_pred)
+print(cm)
+
+# Accuracy
+accuracy <- sum(diag(cm)) / sum(cm)
+cat("Accuracy:", accuracy, "\n")
+
+# caret confusion matrix (more detailed metrics)
 confusionMatrix(y_pred, test$diagnosis)
 ```
 
