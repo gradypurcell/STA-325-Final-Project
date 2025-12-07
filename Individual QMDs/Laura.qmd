@@ -277,6 +277,41 @@ corr_matrix <- df |>
 
 corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
 ```
+
+```{r}
+corr_matrix <- df |> 
+  select(ends_with("_worst")) |> 
+  cor()
+
+corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
+
+corr_matrix
+```
+
+```{r}
+
+corr_matrix <- df |>
+  select("concave.points_mean", "radius_se", "smoothness_se", "radius_worst", "texture_worst", "smoothness_worst", "concavity_worst", "concave.points_worst", "symmetry_worst") |> 
+  cor()
+
+corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
+
+corr_matrix
+diag(corr_matrix) <- 0  # remove diagonal
+
+weak_pairs <- corr_matrix |>
+  as.data.frame() |>
+  rownames_to_column("var1") |>
+  pivot_longer(-var1, names_to = "var2", values_to = "cor") |>
+  filter(var1 < var2,
+         cor > -0.2,
+         cor < 0.2)
+
+weak_pairs
+```
+
+
+
 ```{r}
 pairs(df[, c("radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean")])
 ```
@@ -435,4 +470,198 @@ confusionMatrix(y_pred, test$diagnosis)
 
 
 The Breast Cancer Wisconsin (Diagnostic) Data Set describes characteristics of the cell nuclei of breast masses. The dataset consists of the mean, standard error and "worst" or largest of these features for these 10 features computred from each image: radium, texture, permimeter, area, smoothness, compactness, concavity, concave points, symmetry, and fractal dimension. The radius is the mean of distances from center to points along the perimeter. Texture is the stadnard deviation of gray-scale values). Perimeter measures the distance along the outside of the mass. Area measures how big the mass is. Smoothness is the local variation in radius lengths. Compactness is caclulated by perimeter^2/area - 1, respresenting how dense or elongated the mass is. Concavity is the severity of concave portions of the contour. Concave points is the number of concave portions of the contour. Symmetry is measured ??. Fractal dimension represents the roughness or complexity of the shape and is calculated by the "coastline approximation" -1. We use the ID number as identificaiton and the diagnosis is either M (malignant) or B (benign) and is our response variable. There are 569 observations, with 357 benign and 212 malignant. (mention how the numbers are okay), and there was no missing data to deal with. 
+
+
+```{r}
+#install.packages("rpart")
+#install.packages("rpart.plot")
+library(rpart)
+library(rpart.plot)
+
+tree_model <- rpart(diagnosis ~ concave.points_mean + radius_se + smoothness_se+ radius_worst + texture_worst+ smoothness_worst+concavity_worst+concave.points_worst+symmetry_worst, data = training, method = "class")
+
+prp(tree_model, extra = 2, fallen.leaves = TRUE, type = 4)
+
+
+tree_pred <- predict(tree_model, newdata = test, type = "class")
+confusionMatrix(tree_pred, test$diagnosis)
+
+```
+```{r}
+tree_model <- rpart(diagnosis ~ (concave.points_mean + radius_se + smoothness_se+ radius_worst + texture_worst+ smoothness_worst+concavity_worst+concave.points_worst+symmetry_worst)^2, data = training, method = "class")
+
+prp(tree_model, extra = 2, fallen.leaves = TRUE, type = 4)
+
+
+tree_pred <- predict(tree_model, newdata = test, type = "class")
+confusionMatrix(tree_pred, test$diagnosis)
+```
+```{r}
+
+library(mgcv)      # for gam
+library(dplyr)
+library(caret)     # confusionMatrix
+library(pROC) 
+gam_formula <- as.formula(
+  "diagnosis ~ 
+     s(concave.points_mean) + s(radius_se) + s(smoothness_se) +
+     s(radius_worst) + s(texture_worst) + s(smoothness_worst) +
+     s(concavity_worst) + s(concave.points_worst) + s(symmetry_worst) +
+     # interactions (tensor product smooths)
+     ti(radius_worst, concavity_worst) + 
+     ti(radius_worst, concave.points_worst) +
+     ti(smoothness_worst, concavity_worst) +
+     ti(texture_worst, concavity_worst)"
+)
+
+# Fit the GAM (binomial family for logistic)
+set.seed(42)
+gam_model <- gam(gam_formula, data = training, family = binomial(link = "logit"),
+                 method = "REML", select = TRUE)
+
+# Model summary (check significant smooths and interactions)
+summary(gam_model)
+#plot(gam_model, pages = 1, rug = TRUE)  # visual checks
+
+# Predict probabilities on the test set
+prob_test <- predict(gam_model, newdata = test, type = "response")
+
+# Convert probabilities to class labels (threshold 0.5; change if you want sensitivity-weighted)
+pred_class <- factor(ifelse(prob_test >= 0.5, "M", "B"), levels = levels(training$diagnosis))
+
+# Confusion matrix
+conf_mat <- confusionMatrix(pred_class, test$diagnosis, positive = "M")
+print(conf_mat)
+
+accuracy <- mean(pred_class == test$diagnosis)
+
+```
+```{r}
+auc(test$diagnosis, prob_test)
+```
+
+```{r}
+# R script: Fit EBM via reticulate, predict, confusion matrix
+# Run in R (RStudio recommended)
+
+# ----- packages -----
+if (!requireNamespace("reticulate", quietly = TRUE)) install.packages("reticulate")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("caret", quietly = TRUE)) install.packages("caret")
+if (!requireNamespace("pROC", quietly = TRUE)) install.packages("pROC")
+
+library(reticulate)
+library(dplyr)
+library(caret)
+library(pROC)
+
+# Optionally set a virtualenv or conda env (uncomment & edit if you want)
+# reticulate::use_virtualenv("r-reticulate", required = FALSE)
+# reticulate::use_condaenv("r-reticulate", required = FALSE)
+
+# ----- ensure python package 'interpret' is available -----
+if (!py_module_available("interpret")) {
+  message("Python package 'interpret' not found. Installing via py_install('interpret') ...")
+  # This will install interpret and dependencies via pip in the active Python env
+  reticulate::py_install("interpret", pip = TRUE)
+}
+
+# import the package
+interpret <- import("interpret")
+explainers <- interpret$explainers
+EBM <- explainers$ExplainableBoostingClassifier
+
+# ----- Prepare data: predictors X_train/X_test, labels y_train/y_test -----
+# Replace these with your actual training/test frames already in R: `training` and `test`
+# I assume 'diagnosis' is a factor with levels c("B", "M") as before.
+
+# choose predictors (you can replace/select others)
+predictors <- c("concave.points_mean", "radius_se", "smoothness_se",
+                "radius_worst", "texture_worst", "smoothness_worst",
+                "concavity_worst", "concave.points_worst", "symmetry_worst")
+
+# Ensure predictors exist
+stopifnot(all(predictors %in% names(training)))
+stopifnot(all(predictors %in% names(test)))
+
+# X (data frames) and y (binary 0/1)
+X_train <- training %>% select(all_of(predictors))
+X_test  <- test %>% select(all_of(predictors))
+
+# Convert diagnosis to 0/1 (0 = benign "B", 1 = malignant "M")
+y_train <- ifelse(as.character(training$diagnosis) == "M", 1L, 0L)
+y_test  <- ifelse(as.character(test$diagnosis) == "M", 1L, 0L)
+
+# Convert to Python-friendly objects (pandas DataFrame and numpy array)
+pd <- import("pandas")
+np <- import("numpy")
+
+X_train_py <- r_to_py(as.data.frame(X_train))
+X_test_py  <- r_to_py(as.data.frame(X_test))
+y_train_py <- r_to_py(y_train)  # simple numpy array
+y_test_py  <- r_to_py(y_test)
+
+# ----- Fit the EBM -----
+set.seed(42)
+ebm <- EBM()  # you can pass arguments like max_bins, interactions, inner_bags etc.
+
+# Fit can take a bit - this trains an interpretable boosting classifier
+message("Fitting EBM (this may take a minute)...")
+ebm$fit(X_train_py, y_train_py)
+
+# ----- Predict probabilities & classes on test set -----
+# predict_proba returns array[:,0]=prob of class 0, array[:,1]=prob of class 1
+probs_test <- ebm$predict_proba(X_test_py)
+# convert to R numeric vector of P(M) = column 2
+prob_M <- as.numeric(py_to_r(probs_test))      # flatten -> matrix, may need to reshape
+# If py_to_r produced a matrix-like list, do:
+if (is.matrix(prob_M) || (is.array(prob_M) && length(dim(prob_M)) == 2)) {
+  prob_M <- as.numeric(prob_M[,2])  # second column
+} else if (is.list(prob_M) && length(prob_M) > 0) {
+  # try alternative conversion
+  prob_M <- sapply(py_to_r(probs_test), function(x) x[[2]])
+}
+
+pred_class <- factor(ifelse(prob_M > 0.5, "M", "B"), levels = levels(training$diagnosis))
+
+# ----- Confusion matrix & accuracy -----
+cm <- confusionMatrix(pred_class, test$diagnosis, positive = "M")
+print(cm)
+
+accuracy <- mean(pred_class == test$diagnosis)
+cat("Accuracy:", round(accuracy, 4), "\n")
+
+# AUC
+roc_obj <- roc(response = test$diagnosis, predictor = prob_M, levels = rev(levels(test$diagnosis)))
+cat("AUC:", round(auc(roc_obj), 4), "\n")
+```
+
+
+```{r}
+library(reticulate)
+
+# import correct module
+interpret <- import("interpret")
+EBM <- interpret$glassbox$ExplainableBoostingClassifier
+
+# Fit model
+ebm <- EBM()
+ebm$fit(X_train_py, y_train_py)
+
+# Predict P(M)
+probs_test <- ebm$predict_proba(X_test_py)
+
+# extract column 2 = class 1 probability
+probs_r <- py_to_r(probs_test)
+prob_M <- probs_r[,2]
+
+# convert to class
+pred_class <- ifelse(prob_M > 0.5, "M", "B")
+pred_class <- factor(pred_class, levels = levels(test$diagnosis))
+
+# evaluate
+library(caret)
+confusionMatrix(pred_class, test$diagnosis, positive = "M")
+
+```
 
