@@ -401,6 +401,10 @@ mod_all <- gam(formula_all, data = df,
                method = "REML",
                select = TRUE) 
 ```
+Getting the summary of the model
+```{r}
+summary(mod_all)
+```
 
 Using diagnostics to assess
 ```{r}
@@ -518,8 +522,291 @@ cv_res_df %>% summarise(mean_auc = mean(auc), sd_auc = sd(auc),
 
 ```
 
-# NEXT: Decide which interaction terms to include with the remaining variables
+## Adding Interactions for the GAM model
+Thoughts on also looking at interactions used in other models?
 
+Adding interactions based on domain knowledge.
+1. concave.points: radius_worst because concave points measure sharp inward curves on the tumor oundary whereas radius measures size. large lesions with many concvave points are strong malignancy signals. Note: use tensor products since the concave.point should not be included due to high VIF. 
+2. concavity_worst x radius_worst: concavity measures depth/strent of indentations and large tumors with strong concavity tend to be malignant. This is one of the strongest known nonlinear effects in the WBCD dataset.
+3. smoothness x concavity: Smoothness reflects local uniformity at the tumor boundary while concavity expresses irregularity or distortions. Tumors with high concavity and low smoothness are more malignant than either alone.
+4. texture x concavity: Texture often reflects heteroeneity inside the lesion while concavity reflects edge irregularity. Malignant tumors with high concavity freqently have high texture variance due to necrosis and ductal extension. This interaction has bene noted in prvious ML analyses as important. 
+```{r}
+formula_best <- diagnosis ~ 
+  s(smoothness_se, bs = "cr", k = 10) +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  smoothness_worst  + concave.points_worst + symmetry_worst + 
+  ## Candidate interactions:
+  ti(concave.points_mean, radius_worst, bs=c("cr", "cr")) + 
+  ti(concave.points_worst, radius_worst, bs=c("cr", "cr")) +
+  ti(concave.points_mean, radius_se, bs=c("cr", "cr")) + 
+  ti(concave.points_worst, radius_se, bs=c("cr", "cr")) + 
+  ti(concavity_worst, radius_worst, bs=c("cr", "cr")) + 
+  ti(smoothness_worst, concavity_worst, bs=c("cr", "cr")) + 
+  ti(smoothness_se, concavity_worst, bs=c("cr", "cr")) + 
+  ti(texture_worst, concavity_worst, bs=c("cr", "cr")) 
+  #ti(symmetry_worst, concavity_worst, bs=c("cr", "cr")) 
+
+m_best <- 
+  gam(formula_best,
+    family = binomial(link = "logit"),
+    data = df,
+    method = "REML",
+    select = TRUE
+  )
+
+summary(m_best)
+AIC(mod_all, m_best)
+anova(mod_all, m_best, test="Chisq")
+```
+
+This model has a statistically significant p-value as well as a drop in AIC. This will be chosen as the final model. 
+
+
+Adding interactions by looking at the scatterplot and seeing which look like they have a linear trend between them.
+```{r}
+formula_best <- diagnosis ~ 
+  s(smoothness_se, bs = "cr", k = 10) +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  smoothness_worst  + concave.points_worst + symmetry_worst + 
+  ## Candidate interactions:
+  concave.points_mean:radius_se + concave.points_mean:radius_worst +
+  radius_se:radius_worst + concave.points_mean:concavity_worst + 
+  concave.points_mean:concave.points_worst + radius_worst:concave.points_worst + 
+  concavity_worst:concave.points_worst
+
+  
+m_best <- 
+  gam(formula_best,
+    family = binomial(link = "logit"),
+    data = df,
+    method = "REML",
+    select = TRUE
+  )
+
+summary(m_best)
+AIC(mod_all, m_best)
+anova(mod_all, m_best, test="Chisq")
+```
+
+Yet again the model's AIC with interactions performs worst than the model without interactions.
+
+
+For the interactions below, I just selected those with the lowest correlation from the correlation plot above (absolute value of correlation less than 0.1).
+```{r}
+formula_best <- diagnosis ~ 
+  s(smoothness_se, bs = "cr", k = 10) +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  smoothness_worst  + concave.points_worst + symmetry_worst + 
+  ## Candidate interactions:
+  radius_worst:smoothness_se + concave.points_worst:concave.points_mean + 
+  symmetry_worst:radius_se + concavity_worst:smoothness_se
+
+  
+m_best <- 
+  gam(formula_best,
+    family = binomial(link = "logit"),
+    data = df,
+    method = "REML",
+    select = TRUE
+  )
+
+summary(m_best)
+AIC(mod_all, m_best)
+anova(mod_all, m_best, test="Chisq")
+
+```
+
+Interestingly enough, this model has a higher AIC indicating it might be a worse model for fitting the data.
+```{r}
+anova(mod_all, m_best, test="Chisq")
+
+```
+The p-value is not small enough so the interactions don't significantly improve the model. 
+
+```{r}
+df_pred <- df %>%
+  mutate(.pred_prob = predict(m_best, type = "response"),
+         .pred_link = predict(m_best, type = "link"),
+         .pred_class_05 = as.integer(.pred_prob >= 0.5),
+         .obs = as.integer(!!rlang::sym("diagnosis")))   # ensure diagnosis is numeric 0/1
+
+# Confusion matrix using caret (or base table)
+caret::confusionMatrix(factor(df_pred$.pred_class_05), factor(df_pred$.obs),
+                       positive = "1")
+# or base:
+table(Pred = df_pred$.pred_class_05, Obs = df_pred$.obs)
+```
+However, the accuracy is slightly better. 
+```{r}
+roc_obj <- pROC::roc(df_pred$.obs, df_pred$.pred_prob, quiet = TRUE)
+roc_obj
+# AUC
+auc_val <- as.numeric(pROC::auc(roc_obj))
+print(sprintf("AUC = %.3f", auc_val))
+
+# Youden index threshold
+youden <- coords(roc_obj, "best", best.method = "youden", transpose = FALSE)
+youden
+opt_thresh <- youden["threshold"]
+
+# confusion at optimal threshold
+df_pred <- df_pred %>% mutate(.pred_class_opt = as.integer(.pred_prob >= opt_thresh))
+table(Pred = df_pred$.pred_class_opt, Obs = df_pred$.obs)
+caret::confusionMatrix(factor(df_pred$.pred_class_opt), factor(df_pred$.obs), positive = "1")
+```
+It's also interesting that the optimal threshold is closer to 0.55. We want to prioritize high specificity which is greater in this model. 
+```{r}
+roc_df <- tibble(
+  specificity = roc_obj$specificities,
+  sensitivity = roc_obj$sensitivities,
+  threshold = roc_obj$thresholds
+)
+
+ggplot(roc_df, aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line(size = 1) +
+  geom_abline(linetype = "dashed") +
+  annotate("text", x = 0.6, y = 0.2, label = paste0("AUC = ", round(auc_val, 3))) +
+  labs(x = "False positive rate (1 - specificity)", y = "True positive rate (sensitivity)",
+       title = "ROC curve") +
+  theme_minimal()
+```
+The ROC curve is slightly better in this model as well. 
+
+Tensor products are the correct way to model interactions between two continuous predictors because they allow different scales and smoothness.
+```{r}
+# Adding all possible interactions to the splines
+
+formula_int <- diagnosis ~ 
+  s(smoothness_se, bs = "cr", k = 10) +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  smoothness_worst  + concave.points_worst + symmetry_worst + 
+  ## Candidate interactions:
+  ti(smoothness_se, texture_worst, bs = c("cr", "cr")) +
+  ti(smoothness_se, concavity_worst, bs = c("cr", "cr")) +
+  ti(texture_worst, concavity_worst, bs = c("cr", "cr"))
+
+  
+m_int <- 
+  gam(formula_int,
+    family = binomial(link = "logit"),
+    data = df,
+    method = "REML",
+    select = TRUE
+  )
+```
+
+
+```{r}
+summary(m_int)
+```
+
+```{r}
+# Comparing to the model without interactions
+AIC(mod_all, m_int)
+```
+The AIC is basically the same for the models. Thus, I want to explore adding linear interactions. 
+
+First, I want to check multicollinearity between predictors. Note: this works even when this is a logit model since it is just measuring the collinearity among predictors, not the relationship between predictors and the outcome. If the VIF is less than 5 it interactions can be safely included while severe multicollinearity for VIF> 10 so avoid using interactions. 
+```{r}
+library(corrr)
+library(car)
+cor_mat <- cor(df[feature_list], use = "pairwise.complete.obs")
+print(round(cor_mat, 2))
+
+# quick VIF (use car::vif if installed); simple manual:
+features <- c(feature_list, "diagnosis")
+lm_for_vif <- lm(as.numeric(diagnosis) ~ ., data = df[features])   
+vif_vals <- vif(lm_for_vif)
+print(vif_vals)
+```
+
+Include interactions for with VIF less than 10:
+- radius_se
+- smoothness_se
+- radius_worst
+- texture_worst
+- smoothness_worst
+- concavity_worst
+- summetry_worst
+
+```{r}
+# Adding all of the interactions between the main effects as well as the 
+spline_terms <- c(
+  "s(smoothness_se, bs = 'cr', k = 10)",
+  "s(texture_worst, bs = 'cr', k = 10)",
+  "s(concavity_worst, bs = 'cr', k = 10)"
+)
+
+linear_main <- c(
+  "radius_se",
+  "radius_worst",
+  "smoothness_worst",
+  "symmetry_worst"
+)
+
+lin_pairs <- combn(linear_main, 2, FUN = function(x) paste0(x[1], ":", x[2]))
+
+# Concatenating all terms
+all_terms <- c(spline_terms, linear_main, lin_pairs)
+rhs <- paste(all_terms, collapse = " + ")
+formula_all_lin <- as.formula(paste("diagnosis ~", rhs))
+
+m_lin_int <- gam(formula_all_lin, 
+                 data = df, 
+                 family = binomial(link="logit"), 
+                 method = "REML", 
+                 select = TRUE)
+
+summary(m_lin_int)
+AIC(m_lin_int)
+
+
+  
+```
+Based on the model above, none of the linear interactions are significant. Thus, we will also explore interactions among the variables in the spline.
+
+```{r}
+spline_terms <- c(
+  "s(smoothness_se, bs = 'cr', k = 10)",
+  "s(texture_worst, bs = 'cr', k = 10)",
+  "s(concavity_worst, bs = 'cr', k = 10)"
+)
+
+linear_main <- c(
+  "radius_se",
+  "radius_worst",
+  "smoothness_worst",
+  "symmetry_worst",
+  "smoothness_se",
+  "texture_worst",
+  "concavity_worst"
+)
+
+lin_pairs <- combn(linear_main, 2, FUN = function(x) paste0(x[1], ":", x[2]))
+
+# Concatenating all terms
+all_terms <- c(spline_terms, linear_main, lin_pairs)
+rhs <- paste(all_terms, collapse = " + ")
+formula_all_lin <- as.formula(paste("diagnosis ~", rhs))
+
+m_lin_int <- gam(formula_all_lin, 
+                 data = df, 
+                 family = binomial(link="logit"), 
+                 method = "REML", 
+                 select = TRUE)
+
+summary(m_lin_int)
+AIC(m_lin_int)
+```
+This model performs extremely poorly in terms of the significance of the terms. 
 
 ```{r}
 ### LATER 
