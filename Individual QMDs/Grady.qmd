@@ -380,8 +380,6 @@ results <- map_dfr(feature_list, function(var) {
 })
 ```
 
-
-
 If GAM AIC is much, lower, there is strong evidence of nonlinearity. Additionally, a significant p-value indicates that the spline improves the model fit and nonlinearity exists. 
 
 From the results above, we have decided to include splines for based on the drop in AIC when using the GAM model:
@@ -389,9 +387,138 @@ From the results above, we have decided to include splines for based on the drop
 - texture_worst
 - concavity_worst
 
+## Updating the GAM Model
+```{r}
+formula_all <- diagnosis ~ 
+  s(smoothness_se, bs = "cr", k = 10) +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  smoothness_worst  + concave.points_worst + symmetry_worst
 
+mod_all <- gam(formula_all, data = df,
+               family = binomial(link = "logit"),
+               method = "REML",
+               select = TRUE) 
+```
 
+Using diagnostics to assess
+```{r}
+# check k-index, residuals, gam diagnostics
+gam.check(mod_all)
 
+# check concurvity (multicollinearity-like for smooths)
+concurvity(mod_all, full = TRUE)
+# if high values (close to 1) for 'estimate' consider investigating correlated predictors
+
+```
+```{r}
+resid_dev <- residuals(mod_all, type = "deviance")
+fitted_link <- predict(mod_all, type = "link")
+fitted_prob <- predict(mod_all, type = "response")
+
+# Residuals vs fitted (link scale)
+ggplot(mapping = aes(x = fitted_link, y = resid_dev)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(x = "Fitted (link)", y = "Deviance residuals") +
+  theme_minimal()
+
+# QQ plot of deviance residuals
+qq <- qqnorm(resid_dev, plot.it = FALSE)
+qqplot_df <- data.frame(theoretical = qq$x, sample = qq$y)
+ggplot(qqplot_df, aes(x = theoretical, y = sample)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(title = "QQ plot of deviance residuals") +
+  theme_minimal()
+
+```
+```{r}
+df_pred <- df %>%
+  mutate(.pred_prob = predict(mod_all, type = "response"),
+         .pred_link = predict(mod_all, type = "link"),
+         .pred_class_05 = as.integer(.pred_prob >= 0.5),
+         .obs = as.integer(!!rlang::sym("diagnosis")))   # ensure diagnosis is numeric 0/1
+
+# Confusion matrix using caret (or base table)
+caret::confusionMatrix(factor(df_pred$.pred_class_05), factor(df_pred$.obs),
+                       positive = "1")
+# or base:
+table(Pred = df_pred$.pred_class_05, Obs = df_pred$.obs)
+
+```
+
+```{r}
+roc_obj <- pROC::roc(df_pred$.obs, df_pred$.pred_prob, quiet = TRUE)
+roc_obj
+# AUC
+auc_val <- as.numeric(pROC::auc(roc_obj))
+print(sprintf("AUC = %.3f", auc_val))
+
+# Youden index threshold
+youden <- coords(roc_obj, "best", best.method = "youden", transpose = FALSE)
+youden
+opt_thresh <- youden["threshold"]
+
+# confusion at optimal threshold
+df_pred <- df_pred %>% mutate(.pred_class_opt = as.integer(.pred_prob >= opt_thresh))
+table(Pred = df_pred$.pred_class_opt, Obs = df_pred$.obs)
+caret::confusionMatrix(factor(df_pred$.pred_class_opt), factor(df_pred$.obs), positive = "1")
+
+```
+
+```{r}
+roc_df <- tibble(
+  specificity = roc_obj$specificities,
+  sensitivity = roc_obj$sensitivities,
+  threshold = roc_obj$thresholds
+)
+
+ggplot(roc_df, aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line(size = 1) +
+  geom_abline(linetype = "dashed") +
+  annotate("text", x = 0.6, y = 0.2, label = paste0("AUC = ", round(auc_val, 3))) +
+  labs(x = "False positive rate (1 - specificity)", y = "True positive rate (sensitivity)",
+       title = "ROC curve") +
+  theme_minimal()
+
+```
+Now, building the same model using 5-fold CV to ensure that the model is not overfit. 
+
+The code below takes a really long time to run...we might need to just stick without using CV. 
+
+```{r}
+set.seed(2025)
+K <- 5
+n <- nrow(df)
+folds <- sample(rep(1:K, length.out = n))
+
+cv_res <- lapply(1:K, function(k) {
+  train <- df[folds != k, ]
+  test  <- df[folds == k, ]
+
+  m <- gam(formula_all, data = train, family = binomial(link = "logit"),
+           method = "REML", select = TRUE)
+
+  p_test <- predict(m, newdata = test, type = "response")
+  obs <- test$diagnosis
+
+  auc_k <- as.numeric(pROC::auc(pROC::roc(obs, p_test, quiet = TRUE)))
+  # logloss with numeric stability
+  eps <- 1e-15
+  logloss_k <- -mean(obs * log(p_test + eps) + (1 - obs) * log(1 - p_test + eps))
+  tibble(fold = k, auc = auc_k, logloss = logloss_k)
+})
+
+cv_res_df <- bind_rows(cv_res)
+cv_res_df
+cv_res_df %>% summarise(mean_auc = mean(auc), sd_auc = sd(auc),
+                        mean_logloss = mean(logloss), sd_logloss = sd(logloss))
+
+```
+
+# NEXT: Decide which interaction terms to include with the remaining variables
 
 
 ```{r}
