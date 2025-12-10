@@ -1,10 +1,11 @@
 ---
-editor_options: 
-  markdown: 
+editor_options:
+  markdown:
     wrap: 72
+output: pdf_document
 ---
 
-# **Introduction** 
+# **Introduction**
 
 ## Project Goals
 
@@ -133,8 +134,10 @@ clear biological meaning and can be reasoned about in clinical terms
 
 # Methodology
 
-Our methodology consists of three main stages: exploratory analysis,
-preliminary model comparison, and interpretability focused modeling.
+Our methodology consists of three main stages: exploratory data
+analysis, threshold optimization and evaluation, preliminary model
+comparison, regularized model selection, and nonlinear modeling with
+generalized additive models (GAMs).
 
 ## Exploratory Data Analysis (EDA)
 
@@ -179,12 +182,107 @@ variable selection by shrinking less important coefficients to zero,
 providing a concise, clinically meaningful set of predictors and
 potential interactions.
 
-After selecting these top predictors, we further fit a decision tree
-model informed by the LASSO selected features. Decision trees offer high
-interpretability, producing decision rules that patients and clinicians
-can easily understand. This structure directly supports the project’s
+After selecting these top predictors, we further fit a GAM informed by
+the LASSO selected features. Decision trees offer high interpretability,
+producing decision rules that patients and clinicians can easily
+understand. This structure directly supports the project’s
 interpretability goals and meets the rubric requirement for
 communicating results to individuals outside the field.
+
+## Regularized Logistic Regression and Feature Selection
+
+We first fit a LASSO model to perform variable selection and establish a
+strong, interpretable baseline classifier. The diagnosis variable was
+encoded as 1 for malignant and 0 for benign. Identifier columns were
+removed, and the remaining predictors were standardized. The data were
+randomly split into training (80%) and testing (20%) sets. A LASSO
+logistic regression model was fit using 5-fold cross-validation to
+select the optimal penalty parameter with `cv.glmnet`. This approach
+addresses multicollinearity among predictors and prevents overfitting by
+shrinking less informative coefficients to zero. The final LASSO model
+achieved approximately 98% accuracy on the held-out test set, with
+strong sensitivity and specificity. Model performance was further
+evaluated using the ROC curve and AUC, providing a threshold-independent
+measure of discrimination.
+
+Importantly, the LASSO model yielded a parsimonious subset of clinically
+interpretable predictors, which served two purposes:
+
+1.  Establishing a transparent, high-performing baseline classifier.
+2.  Guiding subsequent nonlinear modeling by identifying variables most
+    strongly associated with malignancy.
+
+## Nonlinearity Assessment and Motivation for GAMs
+
+While logistic regression provides interpretability through
+coefficients, it assumes linear relationships between predictors and the
+log-odds of malignancy. To assess whether this assumption was
+appropriate, we conducted a systematic investigation of potential
+nonlinearity.
+
+For each predictor selected by the LASSO model, we binned the predictor
+into quantiles, computed observed malignancy proportions within each
+bin, and examined both probability-scale and log-odds-scale plots.
+Several predictors, most notably smoothness_se, texture_worst,
+concavity_worst, and radius_worst, exhibited clear nonlinear patterns,
+suggesting that a purely linear model may be misspecified.
+
+## Generalized Additive Models (GAMs)
+
+To flexibly model these nonlinear effects while preserving
+interpretability, we employed Generalized Additive Models (GAMs) with a
+binomial logit link. GAMs model the log-odds of malignancy as a sum of
+smooth functions of predictors, allowing nonlinear relationships to be
+captured without requiring explicit interaction terms.
+
+We compared different spline bases (thin-plate regression splines and
+cubic regression splines) for individual predictors using AIC, REML
+scores, and visual inspection. Cubic regression splines consistently
+provided better stability and more realistic probability behavior, and
+were therefore selected.
+
+Formal model comparisons between generalized linear models and GAMs
+using AIC differences and likelihood ratio tests, confirmed strong
+evidence of nonlinearity for several predictors. Based on these results,
+smooth terms were retained for smoothness_se, texture_worst, and
+concavity_worst. Other predictors entered the model linearly.
+
+## Final Additive GAM Specification
+
+The resulting additive GAM incorporated nonlinear smooth terms for
+predictors with strong evidence of nonlinearity, along with linear
+effects for remaining LASSO-selected features. Model diagnostics,
+including residual plots, k-index checks, and concurvity analysis,
+indicated adequate fit and no severe violations of modeling assumptions.
+Model performance was evaluated using confusion matrices, ROC curves,
+and AUC. The GAM demonstrated strong discriminatory ability and improved
+calibration relative to the purely linear model, while remaining
+interpretable through smooth effect plots.
+
+## Incorporating Interaction Effects
+
+Although GAMs capture nonlinear marginal effects, additive models may
+miss important interactions. Guided by domain knowledge and prior
+findings on the Wisconsin Breast Cancer Dataset, we extended the
+additive GAM to include tensor-product interaction terms between
+clinically meaningful feature pairs like tumor size and boundary
+irregularity. Candidate interactions included: concave points × radius,
+concavity × radius, smoothness × concavity, and texture × concavity.
+
+These interactions were implemented using tensor-product smooths to
+accommodate differing scales and nonlinear dependence. Model comparison
+using AIC and likelihood ratio tests demonstrated a statistically
+significant improvement in fit over the purely additive GAM.
+
+## Final Model Selection
+
+The GAM with selected nonlinear terms and domain-motivated interactions
+was chosen as the final model, as it achieved strong predictive
+performance (high AUC and balanced sensitivity/specificity), captured
+clinically plausible nonlinear and interaction effects, remained
+interpretable through smooth and interaction visualizations, and aligned
+with the project’s emphasis on transparency and trust in medical
+decision making.
 
 ## Cost Analysis and Threshold Selection (add here once done)
 
