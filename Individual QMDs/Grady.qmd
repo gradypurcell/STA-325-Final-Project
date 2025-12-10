@@ -34,15 +34,17 @@ df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
 # Use LASSO for variable selection
 df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
 
-X <- model.matrix(diagnosis ~ ., data = df)[, -1]
+X <- model.matrix( ~ ., data = df)[, -1]
 y <- df$diagnosis
 
 set.seed(123) 
 n <- nrow(X)
 train_idx <- sample(seq_len(n), size = 0.8 * n)
 
-X_train <- X[train_idx, ]
-X_test  <- X[-train_idx, ]
+X_train1 <- X[train_idx, ]
+X_train <- X_train1[, -1]
+X_test1  <- X[-train_idx, ]
+X_test <- X_test1[, -1]
 y_train <- y[train_idx]
 y_test  <- y[-train_idx]
 
@@ -155,27 +157,19 @@ We notice that many of the variables are statistically significant according to 
 First, I will just build a GAM model and then when I have a good idea of what models may be appropriate I'll incorporate 5-fold CV. 
 
 ```{r}
-# Just getting the data for the features
-train2 <- as.data.frame(X_train) %>%
-  mutate(
-    diagnosis = diagnosis,   # add outcome
-    prob = prob              # add predicted probability
-  ) |>
-  select(all_of(feature_list), diagnosis, prob)
+# Just getting the data for the features from the lasso model
 
-train2$outcome <- ifelse(train2$diagnosis == "M", 1, 0)
-
-test2 <- test |>
+train2 <- as.data.frame(X_train1) |>
   select(all_of(feature_list), diagnosis)
-
-test2$outcome <- ifelse(test2$diagnosis == "M", 1, 0)
+test2 <- as.data.frame(X_test1) |>
+  select(all_of(feature_list), diagnosis)
 
 ```
 
 Thin-Plate regression is the default type of spline with no need to choose know locations as they are automatically chosen. This is good for nonlinear relationships with minimal tuning and are good when unsure which spline to use. REML stands for Restricted Maximum Likelihood and is a statistical technique for fitting linear mixed models and estimating variance. REML is preferred over standard Maximum Likelihood because it provides less baised estimates for variance components. 
 
 ```{r}
-m_tp  <- gam(outcome ~ s(smoothness_se, bs = "tp", 
+m_tp  <- gam(diagnosis ~ s(smoothness_se, bs = "tp", 
                            k = 10), 
             data = train2,
             family = binomial(link = "logit"), 
@@ -184,7 +178,7 @@ m_tp  <- gam(outcome ~ s(smoothness_se, bs = "tp",
 
 The cubic spline regression uses a fixed set of knots but can extrapolate oddly at boundaries. 
 ```{r}
-m_cr  <- gam(outcome ~ s(smoothness_se, bs = "cr", 
+m_cr  <- gam(diagnosis ~ s(smoothness_se, bs = "cr", 
                            k = 10), 
             data = train2,
             family = binomial(link = "logit"), 
@@ -194,7 +188,7 @@ m_cr  <- gam(outcome ~ s(smoothness_se, bs = "cr",
 
 Exploring shrinkage of terms
 ```{r}
-m_tp_sel  <- gam(outcome ~ s(smoothness_se, bs = "tp", 
+m_tp_sel  <- gam(diagnosis ~ s(smoothness_se, bs = "tp", 
                            k = 10), 
             data = train2,
             family = binomial(link = "logit"), 
@@ -267,6 +261,135 @@ ggplot(preds, aes(x = smoothness_se, y = fit_link, color = model)) +
 Based on the visual above, I prefer the cubic spline since it doesn't increase it's probability as fact as the thin-plate spline which is more volatile. The problem with the thin-plate with selection is that the probabilities are very much bound between 0.25 and 0.5 which doesn't seem as realistic. The next step is to determine how I can add other splines to the GAM model. 
 
 Chat suggested to add smoothness only when nonlinearity in the variables is suspected. Since we are predicting a binary outcome, I will use the predictions from the logistic regression above to try and visualize nonlinearity. 
+
+Now, we need to figure out how to visualize potential nonlinearity. I was thinking we could use the predicted probabilities from the lasso logistic model as the "ground truth" although this might not be the best idea since this is in itself another model. 
+Chat helped me write the below code which is calculating the average number of diagnoses for each of the bins of smoothness and then plots the line of best fit. Based on the resuls for smoothness, I'd say it's fair to assume that there is a nonlinear relationship between smoothness and the diagnosis. Below are simila rplos for the rest of the the variables.
+```{r}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+
+nbins <- 20
+yvar <- "diagnosis"       # your binary outcome
+
+# Function that bins & plots one variable
+make_binned_plots <- function(df, xvar, yvar, nbins = 20) {
+  
+  # 1) Compute bins
+  binned <- df %>%
+    mutate(bin = ntile(.data[[xvar]], nbins)) %>%
+    group_by(bin) %>%
+    summarise(
+      x_mid = mean(.data[[xvar]], na.rm = TRUE),
+      n     = n(),
+      prop  = mean(.data[[yvar]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      se    = sqrt(prop * (1 - prop) / pmax(n, 1)),
+      lower = pmax(0, prop - 1.96 * se),
+      upper = pmin(1, prop + 1.96 * se),
+      eps   = 1e-3,
+      logit = log((prop + eps) / (1 - prop + eps))
+    )
+  
+  # 2) Proportion plot
+  p_prop <- ggplot(binned, aes(x = x_mid, y = prop)) +
+    geom_point(size = 2) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.01) +
+    labs(
+      title = paste("Binned proportion for", xvar),
+      x = xvar,
+      y = "Observed proportion"
+    ) +
+    theme_minimal()
+  
+  # 3) Logit plot
+  p_logit <- ggplot(binned, aes(x = x_mid, y = logit)) +
+    geom_point(size = 2) +
+    geom_smooth(method = "loess", se = TRUE) +
+    labs(
+      title = paste("Binned log-odds for", xvar),
+      x = xvar,
+      y = "Estimated log-odds"
+    ) +
+    theme_minimal()
+  
+  return(list(binned = binned, prop_plot = p_prop, logit_plot = p_logit))
+}
+
+# ---- Loop over all predictors ----
+results <- map(feature_list, ~ make_binned_plots(df, .x, yvar))
+names(results) <- feature_list
+
+## Showing all of the plots
+results[["smoothness_se"]]$logit_plot
+results[["concave.points_mean"]]$logit_plot
+results[["radius_se"]]$logit_plot
+results[["radius_worst"]]$logit_plot
+results[["texture_worst"]]$logit_plot
+results[["smoothness_worst"]]$logit_plot
+results[["concavity_worst"]]$logit_plot
+results[["concave.points_worst"]]$logit_plot
+results[["symmetry_worst"]]$logit_plot
+
+
+
+
+
+
+```
+
+After looking at the results above, it appears as thought the worst offenders of nonlinearity are:
+- smoothness_se
+- radius_worst
+- concavity_worst
+- texture_worst
+
+Now, we can easily compare a GLM vs GAM fit.
+```{r}
+
+results <- map_dfr(feature_list, function(var) {
+  
+  # build formulas
+  form_glm <- as.formula(paste("diagnosis ~", var))
+  form_gam <- as.formula(paste("diagnosis ~ s(", var, ", k=10)", sep = ""))
+  
+  # fit models
+  mod_glm <- glm(form_glm, data=df, family = binomial("logit"))
+  mod_gam <- gam(form_gam, data=df, bs="cr",
+                 family = binomial("logit"), method="REML")
+  
+  # AIC comparison
+  aic_vals <- AIC(mod_glm, mod_gam)
+  
+  # Likelihood ratio test (nested model test)
+  an <- anova(mod_glm, mod_gam, test="Chisq")
+  pval <- an$`Pr(>Chi)`[2]   # GAM vs GLM
+
+  
+  tibble(
+    variable = var,
+    glm_AIC  = aic_vals$AIC[1],
+    gam_AIC  = aic_vals$AIC[2],
+    delta_AIC = aic_vals$AIC[1] - aic_vals$AIC[2],
+    LRT_pvalue = an$`Pr(>Chi)`[2],  # the p-value comparing GLM vs GAM
+    significant_0.01 = ifelse(!is.na(pval) & pval < 0.01, "YES", "NO")
+
+  )
+})
+```
+
+
+
+If GAM AIC is much, lower, there is strong evidence of nonlinearity. Additionally, a significant p-value indicates that the spline improves the model fit and nonlinearity exists. 
+
+From the results above, we have decided to include splines for based on the drop in AIC when using the GAM model:
+- smoothness_se
+- texture_worst
+- concavity_worst
+
+
 
 
 
