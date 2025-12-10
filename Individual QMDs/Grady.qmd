@@ -11,6 +11,9 @@ library(class)
 library(caret)
 library(pROC)
 library(glmnet)
+library(GGally)
+library(mgcv)
+library(tidyr)
 
 # Loading the data
 df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
@@ -127,32 +130,162 @@ print(feature_list)
 
 The first thing we want to do is to explore all of the possible interactions between these variables. 
 
-Generalized Additive Models allow for flexble nonlinearities in several variables, but retains the additive structure of linear models. 
+[Oct. 25th lecture] Generalized Additive Models allow for flexble nonlinearities in several variables, but retains the additive structure of linear models. A GAM presumes that the regression model can be split into separate nonlinear functions for each predictor. This allows us to investigate and interpet nonlinear effects on each predictor separately, without any need for interactions. When using a GAM, we are less concerned with coefficients and more with the plot. You can use anova() to compare GAM models where the p-value is evidence for nonlinear effects. You can also use GAMs for classification using the logit transformation of the response. 
+
+Advantages:
+- Flexible nonlinear models for each predictor
+- Generally give better predictive power than linear regression
+- Additive models allow us to examine the effect of each predictor individually and is more interpetable
+- Computationally quick to fit since you are just formulating the linear model
+
+Disadvantages:
+- Additive models may miss important interaction effects when they are needed
 
 We want to use GAMs since they are composed of a sum of smooth functions of features instead of or in addition to the standard linear features. With GAMs, we deal with some additive function of inputs which won't require the y to necessarily be a linear function of x. To build a GAM, choose a bsis which is a space of functions for which f is some element of it. 
-https://m-clark.github.io/generalized-additive-models/application.html .
+https://m-clark.github.io/generalized-additive-models/application.html.
+
+## Building a Scatterplot Matrix in R
+```{r}
+cor_plot <- ggpairs(data[, feature_list])
+ggsave("cor_plot.png", cor_plot, width = 12, height = 12, dpi = 300)
+```
+
+We notice that many of the variables are statistically significant according to the correlation test which is included in ggpairs().
+
+First, I will just build a GAM model and then when I have a good idea of what models may be appropriate I'll incorporate 5-fold CV. 
 
 ```{r}
-## Worst Radius
-ggplot(df) + 
-  geom_histogram(aes(x = radius_worst, fill = diagnosis), alpha = 0.3) + 
-  labs(x = "Radius (worst)", y = "Count",
-       title = "Distribution of the Worst Radius by Diagnosis")
+# Just getting the data for the features
+train2 <- as.data.frame(X_train) %>%
+  mutate(
+    diagnosis = diagnosis,   # add outcome
+    prob = prob              # add predicted probability
+  ) |>
+  select(all_of(feature_list), diagnosis, prob)
 
-## SE of Smoothness
-ggplot(df) + 
-  geom_histogram(aes(x = smoothness_se, fill = diagnosis), alpha = 0.3) + 
-  labs(x = "Radius (worst)", y = "Count",
-       title = "Distribution of the Worst Radius by Diagnosis")
+train2$outcome <- ifelse(train2$diagnosis == "M", 1, 0)
 
-## Interaction between the two
-ggplot(df) + 
-  geom_histogram(aes(x = radius_worst*smoothness_se, fill = diagnosis), alpha = 0.3) + 
-  labs(x = "Radius (worst)", y = "Count",
-       title = "Distribution of the Worst Radius by Diagnosis")
+test2 <- test |>
+  select(all_of(feature_list), diagnosis)
+
+test2$outcome <- ifelse(test2$diagnosis == "M", 1, 0)
 
 ```
 
+Thin-Plate regression is the default type of spline with no need to choose know locations as they are automatically chosen. This is good for nonlinear relationships with minimal tuning and are good when unsure which spline to use. REML stands for Restricted Maximum Likelihood and is a statistical technique for fitting linear mixed models and estimating variance. REML is preferred over standard Maximum Likelihood because it provides less baised estimates for variance components. 
+
+```{r}
+m_tp  <- gam(outcome ~ s(smoothness_se, bs = "tp", 
+                           k = 10), 
+            data = train2,
+            family = binomial(link = "logit"), 
+            method = "REML")
+```
+
+The cubic spline regression uses a fixed set of knots but can extrapolate oddly at boundaries. 
+```{r}
+m_cr  <- gam(outcome ~ s(smoothness_se, bs = "cr", 
+                           k = 10), 
+            data = train2,
+            family = binomial(link = "logit"), 
+            method = "REML")
+
+```
+
+Exploring shrinkage of terms
+```{r}
+m_tp_sel  <- gam(outcome ~ s(smoothness_se, bs = "tp", 
+                           k = 10), 
+            data = train2,
+            family = binomial(link = "logit"), 
+            method = "REML",
+            select = TRUE)
+```
+
+Comparing the different models
+
+```{r}
+models <- list(tp = m_tp, cr = m_cr, tp_sel = m_tp_sel)
+compare_df <- tibble(
+  model = names(models),
+  edf = map_dbl(models, ~ sum(summary(.x)$s.table[ , "edf"], na.rm = TRUE)),
+  logLik = map_dbl(models, logLik),
+  AIC = map_dbl(models, AIC),
+  REML = map_dbl(models, ~ .x$gcv.ubre) # optional measure stored in object
+)
+print(compare_df)
+```
+Overall, it appears as though the cubic spline performs the best. 
+```{r}
+# Diagnostics
+gam.check(m_cr)    # look at k-index and residuals
+# or
+k.check(m_cr) 
+```
+
+Building a visual comparison for the model
+```{r}
+# prepare grid across Income
+grid <- tibble(smoothness_se = seq(min(train2$smoothness_se, na.rm = TRUE),
+                            max(train2$smoothness_se, na.rm = TRUE),
+                            length.out = 200))
+
+# optional: if models include other covariates, set them to typical values for prediction:
+# grid <- grid %>% mutate(other_cov = median(df$other_cov, na.rm = TRUE), ...)
+
+preds <- map_dfr(models, function(mod) {
+  p_link <- predict(mod, newdata = grid, type = "link", se.fit = TRUE)
+  tibble(
+    smoothness_se = grid$smoothness_se,
+    model = deparse(substitute(mod)),  # we'll replace model name next
+    fit_link = p_link$fit,
+    se_link  = p_link$se.fit,
+    fit_resp = plogis(p_link$fit),                 # inverse logit -> predicted probability
+    upr = plogis(p_link$fit + 2 * p_link$se.fit),
+    lwr = plogis(p_link$fit - 2 * p_link$se.fit)
+  )
+}, .id = "model_id")
+
+# fix model names: .id currently 1..n, replace with real names
+preds$model <- rep(names(models), each = nrow(grid))
+
+# Plot predicted probability (response scale)
+ggplot(preds, aes(x = smoothness_se, y = fit_resp, color = model)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = model), alpha = 0.15, color = NA) +
+  theme_minimal() +
+  labs(y = "Predicted probability", title = "GAM spline basis comparison (binomial, logit link)")
+
+# If you want to examine the logit (link) scale instead:
+ggplot(preds, aes(x = smoothness_se, y = fit_link, color = model)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = fit_link - 2*se_link, ymax = fit_link + 2*se_link, fill = model),
+              alpha = 0.12, color = NA) +
+  labs(y = "Fitted logit (link)", title = "Linear predictor (logit) across Income")
+
+```
+Based on the visual above, I prefer the cubic spline since it doesn't increase it's probability as fact as the thin-plate spline which is more volatile. The problem with the thin-plate with selection is that the probabilities are very much bound between 0.25 and 0.5 which doesn't seem as realistic. The next step is to determine how I can add other splines to the GAM model. 
+
+Chat suggested to add smoothness only when nonlinearity in the variables is suspected. Since we are predicting a binary outcome, I will use the predictions from the logistic regression above to try and visualize nonlinearity. 
+
+
+
+
+```{r}
+### LATER 
+# 5-fold CV
+cv_5 <- trainControl(method = "cv", number = 5)
+
+model <- train(
+  y ~ s(Income, bs = "tp", k = 10) + . - Income,
+  data = train2,
+  method = "gam",
+  family = binomial(link = "logit"),
+  trControl = cv_5
+)
+
+model
+```
 
 
 
