@@ -523,13 +523,20 @@ cv_res_df %>% summarise(mean_auc = mean(auc), sd_auc = sd(auc),
 ```
 
 ## Adding Interactions for the GAM model
+Next Steps:
+- Figure out where I put the code for determining which variables are in the spline
+- Train the model using the train/test split
+- Determine the sensitivity based on the threshold
+- Train thresholds
+- EDA / Interactions
+
 Thoughts on also looking at interactions used in other models?
 
 Adding interactions based on domain knowledge.
-1. concave.points: radius_worst because concave points measure sharp inward curves on the tumor oundary whereas radius measures size. large lesions with many concvave points are strong malignancy signals. Note: use tensor products since the concave.point should not be included due to high VIF. 
-2. concavity_worst x radius_worst: concavity measures depth/strent of indentations and large tumors with strong concavity tend to be malignant. This is one of the strongest known nonlinear effects in the WBCD dataset.
+1. concave.points x radius_worst: because concave points measure sharp inward curves on the tumor oundary whereas radius measures size. large lesions with many concvave points are strong malignancy signals. Note: use tensor products since the concave.point should not be included due to high VIF. 
+2. concavity_worst x radius_worst: concavity measures depth/strength of indentations and large tumors with strong concavity tend to be malignant. This is one of the strongest known nonlinear effects in the WBCD dataset.
 3. smoothness x concavity: Smoothness reflects local uniformity at the tumor boundary while concavity expresses irregularity or distortions. Tumors with high concavity and low smoothness are more malignant than either alone.
-4. texture x concavity: Texture often reflects heteroeneity inside the lesion while concavity reflects edge irregularity. Malignant tumors with high concavity freqently have high texture variance due to necrosis and ductal extension. This interaction has bene noted in prvious ML analyses as important. 
+4. texture x concavity: Texture often reflects heterogeneity inside the lesion while concavity reflects edge irregularity. Malignant tumors with high concavity frequently have high texture variance due to necrosis and ductal extension. This interaction has been noted in previous ML analyses as important. 
 ```{r}
 formula_best <- diagnosis ~ 
   s(smoothness_se, bs = "cr", k = 10) +
@@ -562,6 +569,12 @@ anova(mod_all, m_best, test="Chisq")
 ```
 
 This model has a statistically significant p-value as well as a drop in AIC. This will be chosen as the final model. 
+
+
+```{r}
+# Getting the sensitivity
+
+```
 
 
 Adding interactions by looking at the scatterplot and seeing which look like they have a linear trend between them.
