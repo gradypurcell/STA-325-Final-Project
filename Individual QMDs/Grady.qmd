@@ -12,8 +12,6 @@ library(caret)
 library(pROC)
 library(glmnet)
 
-
-
 # Loading the data
 df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
 #df <- df |>
@@ -24,32 +22,9 @@ data <- df %>% select(-X)
 df <- data.frame(data)
 ```
 
-## Interaction Terms
-From Laura's code to get the interactions
-```{r}
-corr_matrix <- df |> 
-  select(ends_with("_mean")) |> 
-  cor()
-
-corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
-```
-
-```{r}
-corr_matrix
-
-```
 
 ## Lasso without interactions
 ```{r}
-
-# Loading the data
-df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
-#df <- df |>
-#  select(-X)
-
-data <- df %>% select(-X)
-
-df <- data.frame(data)
 # 1 = malignant, 0 = benign
 df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
 
@@ -104,8 +79,9 @@ coef_df$feature <- rownames(coef_df)
 names(coef_df)[1] <- "coefficient"
 
 # Filtering for coefficients which aren't 0
-coef_df |>
-  filter(coefficient > 0) 
+feature_list <- coef_df |>
+  filter(coefficient > 0) |>
+  pull(feature)
 ```
 
 
@@ -143,6 +119,43 @@ Code for choosing an optimal threshold using the Youden index:
 coords <- coords(roc_obj, "best", ret = c("threshold","sensitivity","specificity"), best.method = "youden")
 coords
 ```
+
+## Building the GAM Model
+```{r}
+print(feature_list)
+```
+
+The first thing we want to do is to explore all of the possible interactions between these variables. 
+
+Generalized Additive Models allow for flexble nonlinearities in several variables, but retains the additive structure of linear models. 
+
+We want to use GAMs since they are composed of a sum of smooth functions of features instead of or in addition to the standard linear features. With GAMs, we deal with some additive function of inputs which won't require the y to necessarily be a linear function of x. To build a GAM, choose a bsis which is a space of functions for which f is some element of it. 
+https://m-clark.github.io/generalized-additive-models/application.html .
+
+```{r}
+## Worst Radius
+ggplot(df) + 
+  geom_histogram(aes(x = radius_worst, fill = diagnosis), alpha = 0.3) + 
+  labs(x = "Radius (worst)", y = "Count",
+       title = "Distribution of the Worst Radius by Diagnosis")
+
+## SE of Smoothness
+ggplot(df) + 
+  geom_histogram(aes(x = smoothness_se, fill = diagnosis), alpha = 0.3) + 
+  labs(x = "Radius (worst)", y = "Count",
+       title = "Distribution of the Worst Radius by Diagnosis")
+
+## Interaction between the two
+ggplot(df) + 
+  geom_histogram(aes(x = radius_worst*smoothness_se, fill = diagnosis), alpha = 0.3) + 
+  labs(x = "Radius (worst)", y = "Count",
+       title = "Distribution of the Worst Radius by Diagnosis")
+
+```
+
+
+
+
 ## Lasso Logistic with Interaction Terms
 Now, the interaction terms using just the significant terms from above will be added.
 ```{r}
@@ -232,8 +245,20 @@ coef(fit, s = "lambda.min")
 
 
 
-## Decision Tree
+## Interaction Terms
+From Laura's code to get the interactions
 ```{r}
+corr_matrix <- df |> 
+  select(ends_with("_mean")) |> 
+  cor()
+
+corrplot::corrplot(corr_matrix, method = "color", type = "upper", tl.cex = 0.7)
+```
+
+```{r}
+corr_matrix
+
+
 
 
 ```
