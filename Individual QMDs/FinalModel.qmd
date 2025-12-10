@@ -1,0 +1,73 @@
+# QMD for the Final Model
+
+## Reading in the data and packages
+```{r}
+# Loading the packages
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(class)
+library(caret)
+library(pROC)
+library(glmnet)
+library(GGally)
+library(mgcv)
+library(tidyr)
+
+# Loading the data
+df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+df <- df |> select(-X)
+df <- data.frame(df)
+
+# Adding a categorical variable for diagnosis
+df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
+df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
+
+```
+
+```{r}
+# This is the variable that changes based on the threshold
+opt_threshold <- 0.5
+```
+
+## Lasso Model
+```{r}
+# Preparing the data for the train/test split
+X <- model.matrix( ~ ., data = df)[, -1]
+y <- df$diagnosis
+
+# Train/test split
+set.seed(123) 
+n <- nrow(X)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_idx, ][, -1]
+X_test  <- X[-train_idx, ][, -1]
+y_train <- y[train_idx]
+y_test  <- y[-train_idx]
+```
+
+Building the Lasso model using 5-fold cross validation. 
+```{r}
+cvfit <- cv.glmnet(
+  x = X_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,        # LASSO
+  nfolds = 5        # 5-fold CV
+)
+
+```
+
+Model diagnostics for the lasso model.
+```{r}
+plot(cvfit) 
+print(cvfit$lambda.min)
+
+prob_test <- predict(cvfit, newx = X_test, s = "lambda.min", 
+                     type = "response")
+
+# Turn into class predictions
+pred_test <- ifelse(prob_test > opt_threshold, 1, 0)
+```
+
