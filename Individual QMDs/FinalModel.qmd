@@ -13,6 +13,9 @@ library(glmnet)
 library(GGally)
 library(mgcv)
 library(tidyr)
+library(knitr)
+library(kableExtra)
+
 ```
 
 Loading the data
@@ -61,12 +64,6 @@ Model diagnostics for the lasso model.
 ```{r}
 plot(cvfit) 
 print(cvfit$lambda.min)
-
-prob_test <- predict(cvfit, newx = X_test, s = "lambda.min", 
-                     type = "response")
-
-# Turn into class predictions
-pred_test <- ifelse(prob_test > opt_threshold, 1, 0)
 ```
 
 Extracting the coefficients from the Lasso model.
@@ -79,7 +76,8 @@ names(coef_df)[1] <- "coefficient"
 
 # Filtering for coefficients which aren't 0
 feature_list <- coef_df |>
-  filter(coefficient > 0) |>
+  filter(feature != "(Intercept)") |> 
+  filter(coefficient != 0) |>
   pull(feature)
 ```
 ### Optimal Threshold
@@ -114,7 +112,18 @@ pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
 
 Building the confusion matrix based on the predicted probabilities. We see below that there are no false negatives which is expected given the threshold we set maximizes sensitivity. 
 ```{r}
-table(Predicted = pred_class, Actual = y_test)
+cm <- table(Predicted = pred_class, Actual = y_test)
+
+cm_df <- as.data.frame.matrix(cm)
+
+cm_labeled <- data.frame(
+  Outcome = c("Predicted Benign", "Predicted Malignant"),
+  Benign  = cm[, "0"],
+  Malignant = cm[, "1"]
+)
+
+kable(cm_labeled, caption = "Confusion Matrix", align = "c")
+
 ```
 
 Gathering other metrics for the accuracy, sensitivity, and specificity. 
@@ -128,15 +137,18 @@ c(accuracy = accuracy, sensitivity = sens, specificity = spec)
 
 Plotting an AUC curve to assess model performance. 
 ```{r}
-roc_obj <- roc(y_test, prob_test)
+roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
 auc_val <- auc(roc_obj)
+
 print(auc_val)
-plot(roc_obj, main = paste("AUC =", round(auc_val, 3)))
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
+     xlab = "1 - Specificity",
+     legacy.axes=TRUE)
 ```
 Based on the model performance on the test data above, the model has high accuracy as well as sensitivity and specificity. 
 
 ### Final Features
-The below features are the ones that the lasso logsitic model kept in the model, so we will use these features for building the GAM model.
+The below features are the ones that the lasso logistic model kept in the model, so we will use these features for building the GAM model.
 ```{r}
 print(feature_list)
 ```

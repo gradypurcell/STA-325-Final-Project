@@ -1,9 +1,22 @@
 ---
-editor_options:
+title: "Predicting Breast Tumor Malignancy Using Generalized Additive Models"
+author: "Laura Cai, Ava Exelbirt, Abby Li, Grady Purcell, Ella Tillinghast"
+date: "`r Sys.Date()`"
+  editor_options:
   markdown:
     wrap: 72
 output: pdf_document
 ---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,        # hide code by default
+  message = FALSE,     # hide messages
+  warning = FALSE,     # hide warnings
+  fig.align = "center"
+)
+
+```
+
 
 # **Introduction**
 
@@ -91,7 +104,7 @@ can be used ethically and effectively in supporting clinical workflows,
 improving early detection, and helping reduce false positives which have
 been long recognized as a challenge in mammographic screening.
 
-# Data
+# **Data**
 
 The dataset used in this analysis comes from the Diagnostic Wisconsin
 Breast Cancer Database (WBCD), originally created from digitized images
@@ -139,7 +152,37 @@ analysis, threshold optimization and evaluation, preliminary model
 comparison, regularized model selection, and nonlinear modeling with
 generalized additive models (GAMs).
 
+## Cost Analysis and Threshold Selection (add here once done)
+
+We then researched the cost of false positives and negatives to compute
+a cost based loss function to determine the optimal classification
+threshold. This threshold will reflect the asymmetric cost of false
+negatives (missing a malignant tumor) versus false positives
+(unnecessary further testing), and will guide our final decision rule
+applied to our model. 
+
+[INSERT PRIOR RESEARCH HERE]
+- Describe range of plausible threshold values
+- Why we want to minimize false negatives, maximize sensitivity
+
 ## Exploratory Data Analysis (EDA)
+
+```{r}
+# Loading the packages
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(class)
+library(caret)
+library(pROC)
+library(glmnet)
+library(GGally)
+library(mgcv)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+```
+
 
 We began by conducting a comprehensive exploratory data analysis to
 understand the distribution of each of the 30 predictors and to identify
@@ -168,8 +211,8 @@ sensitivity, specificity, and confusion matrices. Cross validation was
 used where appropriate to reduce sampling variability.
 
 Although the random forest achieved strong predictive accuracy, it
-lacked clear interpretability. KNN performed reasonably but does not
-provide coefficients, feature weights, or insight into mechanism.
+lacked interpretability which should be prioritized since this model will be used by doctors to diagnose whether a breast cancer mass is benign or malignant at an early stage. 
+KNN performed reasonably but does not provide coefficients, feature weights, or insight into mechanism.
 Standard logistic regression was interpretable but tended to overfit
 without regularization due to the high number of correlated predictors.
 
@@ -189,9 +232,10 @@ understand. This structure directly supports the project’s
 interpretability goals and meets the rubric requirement for
 communicating results to individuals outside the field.
 
+
 ## Regularized Logistic Regression and Feature Selection
 
-We first fit a LASSO model to perform variable selection and establish a
+We first fit a LASSO logistic model to perform variable selection and establish a
 strong, interpretable baseline classifier. The diagnosis variable was
 encoded as 1 for malignant and 0 for benign. Identifier columns were
 removed, and the remaining predictors were standardized. The data were
@@ -199,12 +243,114 @@ randomly split into training (80%) and testing (20%) sets. A LASSO
 logistic regression model was fit using 5-fold cross-validation to
 select the optimal penalty parameter with `cv.glmnet`. This approach
 addresses multicollinearity among predictors and prevents overfitting by
-shrinking less informative coefficients to zero. The final LASSO model
-achieved approximately 98% accuracy on the held-out test set, with
-strong sensitivity and specificity. Model performance was further
-evaluated using the ROC curve and AUC, providing a threshold-independent
-measure of discrimination.
+shrinking less informative coefficients to zero. The final LASSO logistic model
+achieved approximately 99% accuracy on the held-out test set, with
+perfect sensitivity and strong specificity. 
 
+### Setting the Optimal Threshold
+
+From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From our cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
+
+```{r}
+df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+df <- df |> select(-X)
+df <- data.frame(df)
+
+# Adding a categorical variable for diagnosis
+df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
+df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
+
+# Preparing the data for the train/test split
+X <- model.matrix( ~ ., data = df)[, -1]
+y <- df$diagnosis
+
+# Train/test split
+set.seed(123) 
+n <- nrow(X)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_idx, ][, -1]
+X_test  <- X[-train_idx, ][, -1]
+y_train <- y[train_idx]
+y_test  <- y[-train_idx]
+
+# Building the LASSO model
+cvfit <- cv.glmnet(
+  x = X_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,        # LASSO
+  nfolds = 5        # 5-fold CV
+)
+
+# Extracting the optimal threshold
+coords <- coords(roc_obj,
+       x = 1,
+       input = "sensitivity",
+       ret = c("threshold", "sensitivity", "specificity"))
+opt_threshold <- coords$threshold
+
+# Predicted probabilities (logistic) at lambda.min
+prob_test <- predict(cvfit, newx = X_test, 
+                     s = "lambda.min", 
+                     type = "response")
+prob_test <- as.numeric(prob_test)
+
+# Predicted class based on the optimal threshold
+pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
+```
+
+```{r, eval=TRUE, results = 'asis', fig.cap="Figure 1: Confusion Matrix", out.width="80%"}
+# Building the Confusion Matrix
+cm <- table(Predicted = pred_class, Actual = y_test)
+cm_df <- as.data.frame.matrix(cm)
+cm_labeled <- data.frame(
+  Outcome = c("Predicted Benign", "Predicted Malignant"),
+  Benign  = cm[, "0"],
+  Malignant = cm[, "1"]
+)
+kable(cm_labeled, caption = "Confusion Matrix", align = "c")
+```
+```{r}
+accuracy <- mean(pred_class == y_test)
+sens <- sum(pred_class == 1 & y_test == 1) / sum(y_test == 1)
+spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
+c(accuracy = accuracy, sensitivity = sens, specificity = spec)
+```
+
+The Confusion Matrix above uses the optimal threshold and achieves perfect sensitivity, a specificity of 0.98, and a 99% accuracy. This indicates strong overall model performance and although there are possible concerns about model overfitting, we are confident in our results given that we used 5-fold CV to train the data and then tested the data on the hold-out set.  
+
+Model performance was further evaluated using the ROC curve and AUC, providing a threshold-independent
+measure of discrimination.
+```{r, eval=TRUE, message=FALSE, warning=FALSE, results='asis', fig.cap="Figure 2: ROC Curve", out.width="80%:}
+roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
+auc_val <- auc(roc_obj)
+
+#print(auc_val)
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
+     xlab = "1 - Specificity",
+     legacy.axes=TRUE)
+```
+
+The last step after building the LASSO logistic model was exracting the features which had non-zero coefficients for predicting the probability of a tumor being benign or malignant. Below is a list of the 13 features (out of 30) which the LASSO model indicated were important for predicting the probabilities ordered in descending order of magnitude. 
+```{r, eval=TRUE}
+# Extracting the coefficient features
+coef_min <- coef(cvfit, s = "lambda.min")
+coef_df <- as.data.frame(as.matrix(coef_min))
+coef_df$feature <- rownames(coef_df)
+names(coef_df)[1] <- "coefficient"
+
+# Filtering for coefficients which aren't 0
+feature_list <- coef_df |>
+  filter(feature != "(Intercept)") |>
+  filter(coefficient != 0) |>
+  arrange(desc(abs(coefficient))) |>
+  pull(feature)
+
+kable(feature_list,
+      caption = "Non-Zero Coefficients at Lambda.min",
+      align = "c")
+```
 Importantly, the LASSO model yielded a parsimonious subset of clinically
 interpretable predictors, which served two purposes:
 
@@ -284,11 +430,8 @@ interpretable through smooth and interaction visualizations, and aligned
 with the project’s emphasis on transparency and trust in medical
 decision making.
 
-## Cost Analysis and Threshold Selection (add here once done)
+## Limitations
 
-We then researched the cost of false positives and negatives to compute
-a cost based loss function to determine the optimal classification
-threshold. This threshold will reflect the asymmetric cost of false
-negatives (missing a malignant tumor) versus false positives
-(unnecessary further testing), and will guide our final decision rule
-applied to our model.
+## Conclusion
+
+## Future Analysis
