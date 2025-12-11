@@ -2,7 +2,7 @@
 title: "Predicting Breast Tumor Malignancy Using Generalized Additive Models"
 author: "Laura Cai, Ava Exelbirt, Abby Li, Grady Purcell, Ella Tillinghast"
 date: "`r Sys.Date()`"
-  editor_options:
+editor_options:
   markdown:
     wrap: 72
 output: pdf_document
@@ -145,7 +145,7 @@ analysis (EDA) and model interpretation because each predictor has a
 clear biological meaning and can be reasoned about in clinical terms
 (e.g., radius relates to tumor size, concavity relates to irregularity).
 
-# Methodology
+# **Methodology**
 
 Our methodology consists of three main stages: exploratory data
 analysis, threshold optimization and evaluation, preliminary model
@@ -167,7 +167,7 @@ applied to our model.
 
 ## Exploratory Data Analysis (EDA)
 
-```{r}
+```{r, eval=TRUE}
 # Loading the packages
 library(tidyverse)
 library(ggplot2)
@@ -232,7 +232,6 @@ understand. This structure directly supports the project’s
 interpretability goals and meets the rubric requirement for
 communicating results to individuals outside the field.
 
-
 ## Regularized Logistic Regression and Feature Selection
 
 We first fit a LASSO logistic model to perform variable selection and establish a
@@ -283,18 +282,20 @@ cvfit <- cv.glmnet(
   nfolds = 5        # 5-fold CV
 )
 
+# Predicted probabilities (logistic) at lambda.min
+prob_test <- predict(cvfit, newx = X_test, 
+                     s = "lambda.min", 
+                     type = "response")
+prob_test <- as.numeric(prob_test)
+
+roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
+
 # Extracting the optimal threshold
 coords <- coords(roc_obj,
        x = 1,
        input = "sensitivity",
        ret = c("threshold", "sensitivity", "specificity"))
 opt_threshold <- coords$threshold
-
-# Predicted probabilities (logistic) at lambda.min
-prob_test <- predict(cvfit, newx = X_test, 
-                     s = "lambda.min", 
-                     type = "response")
-prob_test <- as.numeric(prob_test)
 
 # Predicted class based on the optimal threshold
 pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
@@ -311,21 +312,19 @@ cm_labeled <- data.frame(
 )
 kable(cm_labeled, caption = "Confusion Matrix", align = "c")
 ```
+
+### Model Diagnostics 
+The Confusion Matrix above uses the optimal threshold and achieves perfect sensitivity, a specificity of 0.98, and a 99% accuracy. This indicates strong overall model performance and although there are possible concerns about model overfitting, we are confident in our results given that we used 5-fold CV to train the data and then tested the data on the hold-out set.  
 ```{r}
 accuracy <- mean(pred_class == y_test)
 sens <- sum(pred_class == 1 & y_test == 1) / sum(y_test == 1)
 spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
-c(accuracy = accuracy, sensitivity = sens, specificity = spec)
+#c(accuracy = accuracy, sensitivity = sens, specificity = spec)
 ```
 
-The Confusion Matrix above uses the optimal threshold and achieves perfect sensitivity, a specificity of 0.98, and a 99% accuracy. This indicates strong overall model performance and although there are possible concerns about model overfitting, we are confident in our results given that we used 5-fold CV to train the data and then tested the data on the hold-out set.  
-
-Model performance was further evaluated using the ROC curve and AUC, providing a threshold-independent
-measure of discrimination.
-```{r, eval=TRUE, message=FALSE, warning=FALSE, results='asis', fig.cap="Figure 2: ROC Curve", out.width="80%:}
-roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
+Model performance was further evaluated using an ROC curve and a measure of AUC, providing a threshold-independent measure of discrimination. The AUC for the ROC curve is 0.9994 which is fairly high, giving us confidence in our model. 
+```{r}
 auc_val <- auc(roc_obj)
-
 #print(auc_val)
 plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
      xlab = "1 - Specificity",
@@ -347,11 +346,35 @@ feature_list <- coef_df |>
   arrange(desc(abs(coefficient))) |>
   pull(feature)
 
-kable(feature_list,
-      caption = "Non-Zero Coefficients at Lambda.min",
-      align = "c")
+# Grouping by the values they end in
+group_se    <- feature_list[grepl("_se$", feature_list)]
+group_mean  <- feature_list[grepl("_mean$", feature_list)]
+group_worst <- feature_list[grepl("_worst$", feature_list)]
+
+# Determine longest group
+max_len <- max(length(group_se), length(group_mean), length(group_worst))
+
+# Pad groups to same length
+group_se_padded    <- c(group_se,    rep("", max_len - length(group_se)))
+group_mean_padded  <- c(group_mean,  rep("", max_len - length(group_mean)))
+group_worst_padded <- c(group_worst, rep("", max_len - length(group_worst)))
+
+# Build final data frame
+df_grouped <- data.frame(
+  Mean  = group_mean_padded,
+  SE    = group_se_padded,
+  Worst = group_worst_padded
+)
+
+kable(
+  df_grouped,
+  caption = "Selected Features",
+  align = "c"
+)
 ```
-Importantly, the LASSO model yielded a parsimonious subset of clinically
+
+
+In summary, the LASSO logistic model yielded a parsimonious subset of clinically
 interpretable predictors, which served two purposes:
 
 1.  Establishing a transparent, high-performing baseline classifier.

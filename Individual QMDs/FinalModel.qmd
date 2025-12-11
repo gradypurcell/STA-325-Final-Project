@@ -83,6 +83,7 @@ feature_list <- coef_df |>
 ### Optimal Threshold
 Since we are working on cancer detection, we want to minimize the false negative rate since we would prefer to incorrectly classify a tumor as malignant. In order to to this, we want to maximize sensitivity. Since sensitivity is already fairly high when we have a threshold at 0.5, we are going to find the threshold which gives us a maximal sensitivity level of 1.
 ```{r}
+roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
 coords <- coords(roc_obj,
        x = 1,
        input = "sensitivity",
