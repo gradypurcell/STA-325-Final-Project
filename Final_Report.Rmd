@@ -152,7 +152,7 @@ analysis, threshold optimization and evaluation, preliminary model
 comparison, regularized model selection, and nonlinear modeling with
 generalized additive models (GAMs).
 
-## Cost Analysis and Threshold Selection (add here once done)
+## Cost Analysis and Threshold Selection 
 
 We then researched the cost of false positives and negatives to compute
 a cost based loss function to determine the optimal classification
@@ -161,9 +161,9 @@ negatives (missing a malignant tumor) versus false positives
 (unnecessary further testing), and will guide our final decision rule
 applied to our model. 
 
-[INSERT PRIOR RESEARCH HERE]
-- Describe range of plausible threshold values
-- Why we want to minimize false negatives, maximize sensitivity
+As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
+
+Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
 
 ## Exploratory Data Analysis (EDA)
 
