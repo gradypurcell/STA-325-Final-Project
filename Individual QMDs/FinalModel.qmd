@@ -13,7 +13,10 @@ library(glmnet)
 library(GGally)
 library(mgcv)
 library(tidyr)
+```
 
+Loading the data
+```{r}
 # Loading the data
 df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
 df <- df |> select(-X)
@@ -25,12 +28,7 @@ df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
 
 ```
 
-```{r}
-# This is the variable that changes based on the threshold
-opt_threshold <- 0.5
-```
-
-## Lasso Model
+## Lasso Logistic Model
 ```{r}
 # Preparing the data for the train/test split
 X <- model.matrix( ~ ., data = df)[, -1]
@@ -70,4 +68,77 @@ prob_test <- predict(cvfit, newx = X_test, s = "lambda.min",
 # Turn into class predictions
 pred_test <- ifelse(prob_test > opt_threshold, 1, 0)
 ```
+
+Extracting the coefficients from the Lasso model.
+```{r}
+# Extracting the coefficient features
+coef_min <- coef(cvfit, s = "lambda.min")
+coef_df <- as.data.frame(as.matrix(coef_min))
+coef_df$feature <- rownames(coef_df)
+names(coef_df)[1] <- "coefficient"
+
+# Filtering for coefficients which aren't 0
+feature_list <- coef_df |>
+  filter(coefficient > 0) |>
+  pull(feature)
+```
+### Optimal Threshold
+Since we are working on cancer detection, we want to minimize the false negative rate since we would prefer to incorrectly classify a tumor as malignant. In order to to this, we want to maximize sensitivity. Since sensitivity is already fairly high when we have a threshold at 0.5, we are going to find the threshold which gives us a maximal sensitivity level of 1.
+```{r}
+coords <- coords(roc_obj,
+       x = 1,
+       input = "sensitivity",
+       ret = c("threshold", "sensitivity", "specificity"))
+coords 
+```
+
+Setting the optimal threshold which falls within a range of outside research and is extracted from the code above. 
+```{r}
+# This is the variable that changes based on the threshold
+opt_threshold <- coords$threshold
+
+```
+
+### Model Diagnostics
+Getting the predicted probabilities based on the optimal threshold and minimal lambda value.
+```{r}
+# Predicted probabilities (logistic) at lambda.min
+prob_test <- predict(cvfit, newx = X_test, 
+                     s = "lambda.min", 
+                     type = "response")
+prob_test <- as.numeric(prob_test)
+
+# Predicted class based on the optimal threshold
+pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
+```
+
+Building the confusion matrix based on the predicted probabilities. We see below that there are no false negatives which is expected given the threshold we set maximizes sensitivity. 
+```{r}
+table(Predicted = pred_class, Actual = y_test)
+```
+
+Gathering other metrics for the accuracy, sensitivity, and specificity. 
+```{r}
+accuracy <- mean(pred_class == y_test)
+sens <- sum(pred_class == 1 & y_test == 1) / sum(y_test == 1)
+spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
+c(accuracy = accuracy, sensitivity = sens, specificity = spec)
+
+```
+
+Plotting an AUC curve to assess model performance. 
+```{r}
+roc_obj <- roc(y_test, prob_test)
+auc_val <- auc(roc_obj)
+print(auc_val)
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)))
+```
+Based on the model performance on the test data above, the model has high accuracy as well as sensitivity and specificity. 
+
+### Final Features
+The below features are the ones that the lasso logsitic model kept in the model, so we will use these features for building the GAM model.
+```{r}
+print(feature_list)
+```
+
 
