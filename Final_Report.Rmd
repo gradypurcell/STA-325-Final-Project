@@ -749,3 +749,9 @@ Our findings have crafted the framework for future researchers to continuously t
 
 # **References**
 Github: https://github.com/gradypurcell/STA-325-Final-Project.git  
+
+# ** Sources**
+CDC: https://www.cdc.gov/united-states-cancer-statistics/publications/breast-cancer-stat-bite.html
+American Cancer Society: https://www.cancer.org/content/dam/cancer-org/research/cancer-facts-and-statistics/breast-cancer-facts-and-figures/2022-2024-breast-cancer-fact-figures-acs.pdf
+WebMD: https://www.webmd.com/breast-cancer/breast-cancer-costs
+UTMB: https://www.utmb.edu/news/article/health-blog/2025/10/20/beyond-the-diagnosis--facing-the-emotional-side-of-breast-cancer
