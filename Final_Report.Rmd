@@ -209,9 +209,6 @@ negatives (missing a malignant tumor) versus false positives
 (unnecessary further testing), and will guide our final decision rule
 applied to our model. 
 
-** LAURA INCLUDE THRESHOLD FOR PROBABILITY
-** LAURA REWRITE WHATEVER NEEDS CHANGING BELOW
-
 As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
 
 Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
@@ -258,7 +255,9 @@ achieved approximately 99% accuracy on the held-out test set, with
 perfect sensitivity and strong specificity. 
 
 ### Setting the Optimal Threshold
-Using the From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From our cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
+From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From the cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351 using Youden's J statistic. Youden's method is a way to choose the "best" classification threshold by maximizing the combined performnace of sensitiivty and specificity. The optimal threshold is one that maximizes J = Sensitivity + Specificity - 1. For this diagnostic classification problem, Youden's J statistic chooses the threshold that provides a balance weight to correctly identifying malignant and benign cases. Since cancer diagnosis requires higher sensiviity to avoid missing malignant cases, we want the threshold to be less than 0.5 so the false negative rate is decreased, so 0.351 seems a reasonable value. Other benefits for using Youden's statistics is that it is not distorted by how common cancer is in the dataset and it is transparet for clinicians. 
+
+Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
 
 ```{r}
 df <- read.csv("Data/data.csv")
@@ -544,6 +543,28 @@ results |>
 ```
 
 From the results above, the following features were included in the GAM as cubic splines: texture_se, compactness_se, fractal_dimension_se, texture_worst, and concavity_worst. 
+
+From here, the initial GAM model was built using cubic splines for 5 nonlinear features and including the other 8 features as main effects. 
+```{r}
+formula_all <- diagnosis ~ 
+  s(texture_se, bs = "cr", k = 10) +
+  s(compactness_se, bs = "cr", k = 10) +
+  s(fractal_dimension_se, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) + 
+  compactness_mean  + concave.points_mean + radius_se + 
+  smoothness_se + radius_worst + smoothness_worst + concave.points_worst + 
+  symmetry_worst
+
+mod_all <- bam(formula_all,
+               data = train_df,
+               family = binomial(link = "logit"),
+               method = "fREML",
+               discrete = TRUE,      # huge speed boost
+               select = TRUE)
+```
+
 
 
 Formal model comparisons between generalized linear models and GAMs
