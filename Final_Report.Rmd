@@ -455,6 +455,8 @@ decision making.
 
 ## Limitations
 
+One limitation is that the data is from 1995. While our work provides proof of concept modeling, future work can expand upon these findings by utilizing modern imaging technology (3D mammography, MRI, MBI) that can can detect additional features. Another limitation is that the predictors are based on computed summary statistics for each tumor (mean, SE, "worst"). Although having these values provide general trends, they may fail to capture specific nuances to tumor characteristics compared to using raw imaging data. An additional limitation to the models selected, lasso logistic regression and GAMs, is that important nonlinear or interaction effects may be overlooked, since regression relies on linear assumption and GAMs may fail to capture complex, higher-order interactions between tumor features. 
+
 ## Conclusion
 
 ## Future Analysis
