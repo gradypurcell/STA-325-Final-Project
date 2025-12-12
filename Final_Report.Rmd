@@ -414,6 +414,15 @@ were therefore selected.
 
 After determining the appropriate spline to be cubic splines, we selected which features show strong violation of nonlinearity so we can include them in splines. All other variables which don't show strong evidence of nonlinearity will be included as main effects or interaction terms. To do this, we first binned each of the predictors and calculated the appropriate log-odds of malignancy within the training data. We then visualized the logit plot for each predictor to determine where we could see strong violations of nonlinearity. 
 
+```{r}
+# Getting the training dataframe
+X2 <- model.matrix( ~ ., data = df)[, -1]
+
+# Getting the dataframes
+train_df <- as.data.frame(X2[train_idx, ])
+test_df <- as.data.frame(X2[-train_idx, ])
+```
+
 ```{r, eval = TRUE, results = 'asis', fig.cap="Figure 3: Log-Odds Plots", out.width="80%"}
 nbins <- 20
 yvar <- "diagnosis"       # your binary outcome
@@ -494,17 +503,47 @@ wrap_plots(plots, ncol = 4) &
 
 ```
 
+In Figure 3, we observe that many of the variables to violate nonlinearity. Thus, we also want to quantitatively determine which features should be included as splines by comparing a GLM model to predict malignancy probability with a GAM using only a cubic spline with the selected feature. Then, we compared the change in AIC between the GLM and GAM as well as the p-value for the Chi-Squared test where the cutoff was set at $\alpha = 0.01$. Features which had a drop in AIC with a magnitude of at least 4 and a significant p-value were identified as features with strong evidence of non-linearity. The delta AIC value of 4 was selected using the convention that a drop in AIC greater than 4 is evidence that the GAM meaningfully improves the model fit. 
 
+```{r, eval=TRUE}
+results <- map_dfr(feature_list, function(var) {
+  
+  # build formulas
+  form_glm <- as.formula(paste("diagnosis ~", var))
+  form_gam <- as.formula(paste("diagnosis ~ s(", var, ", k=10)", sep = ""))
+  
+  # fit models
+  mod_glm <- glm(form_glm, data=train_df, family = binomial("logit"))
+  mod_gam <- gam(form_gam, data=train_df, bs="cr",
+                 family = binomial("logit"), method="REML")
+  
+  # AIC comparison
+  aic_vals <- AIC(mod_glm, mod_gam)
+  
+  # Likelihood ratio test (nested model test)
+  an <- anova(mod_glm, mod_gam, test="Chisq")
+  pval <- an$`Pr(>Chi)`[2]   # GAM vs GLM
 
+  
+  tibble(
+    variable = var,
+    glm_AIC  = aic_vals$AIC[1],
+    gam_AIC  = aic_vals$AIC[2],
+    delta_AIC = aic_vals$AIC[1] - aic_vals$AIC[2],
+    LRT_pvalue = an$`Pr(>Chi)`[2],  # the p-value comparing GLM vs GAM
+    significant_0.01 = ifelse(!is.na(pval) & pval < 0.01, "YES", "NO")
 
-```{r}
-# Getting the training dataframe
-X2 <- model.matrix( ~ ., data = df)[, -1]
+  )
+})
 
-# Getting the dataframes
-train_df <- as.data.frame(X2[train_idx, ])
+results |> 
+  filter(abs(delta_AIC) > 4, significant_0.01 == "YES") |>
+  select(variable, delta_AIC) |>
+  kable()
+
 ```
 
+From the results above, the following features were included in the GAM as cubic splines: texture_se, compactness_se, fractal_dimension_se, texture_worst, and concavity_worst. 
 
 
 Formal model comparisons between generalized linear models and GAMs
