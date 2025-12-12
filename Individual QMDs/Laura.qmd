@@ -665,3 +665,492 @@ confusionMatrix(pred_class, test$diagnosis, positive = "M")
 
 ```
 
+
+GAM
+
+```{r}
+ggplot(data = df, aes(x = radius_worst, y = concavity_worst)) +
+  geom_point()
+
+ggplot(data = df, aes(x = radius_worst, y = concave.points_worst)) +
+  geom_point()
+
+ggplot(data = df, aes(x = smoothness_worst, y = concavity_worst)) +
+  geom_point()
+
+ggplot(data = df, aes(x = texture_worst, y = concavity_worst)) +
+  geom_point()
+```
+
+```{r}
+ggplot(df, aes(radius_worst, concavity_worst, color = diagnosis)) +
+  geom_point() +
+  geom_smooth(method = "gam")
+
+ggplot(df, aes(radius_worst, concave.points_worst, color = diagnosis)) +
+  geom_point() +
+  geom_smooth(method = "gam")
+
+ggplot(df, aes(smoothness_worst, concavity_worst, color = diagnosis)) +
+  geom_point() +
+  geom_smooth(method = "gam")
+
+ggplot(df, aes(texture_worst, concavity_worst, color = diagnosis)) +
+  geom_point() +
+  geom_smooth(method = "gam")
+
+```
+
+
+
+```{r}
+library(mgcv)      # for gam
+library(dplyr)
+library(caret)     # confusionMatrix
+library(pROC) 
+
+# gam_formula <- as.formula(
+#   "diagnosis ~ 
+#      s(concave.points_mean) + s(radius_se) + s(smoothness_se) +
+#      s(radius_worst) + s(texture_worst) + s(smoothness_worst) +
+#      s(concavity_worst) + s(concave.points_worst) + s(symmetry_worst)"
+# )
+# 0.9597       
+
+gam_formula <- as.formula(
+  "diagnosis ~
+     s(concave.points_mean) + s(radius_se) + s(smoothness_se) +
+     s(radius_worst) + s(texture_worst) + s(smoothness_worst) +
+     s(concavity_worst) + s(concave.points_worst) + s(symmetry_worst) +
+     # interactions (tensor product smooths)
+     ti(radius_worst, concavity_worst) +
+     ti(radius_worst, concave.points_worst) +
+     ti(smoothness_worst, concavity_worst) +
+     ti(texture_worst, concavity_worst)"
+)
+# 0.9677
+
+# #based on significant interactions for the for previous one
+# gam_formula <- as.formula(
+#   "diagnosis ~
+#      s(concave.points_mean) + s(radius_se) + s(smoothness_se) +
+#      s(radius_worst) + s(texture_worst) + s(smoothness_worst) +
+#      s(concavity_worst) + s(concave.points_worst) + s(symmetry_worst) +
+#      # interactions (tensor product smooths)
+#      ti(radius_worst, concave.points_worst) +
+#      ti(texture_worst, concavity_worst)"
+# )
+# #0.9597      
+
+#based on significance for the for previous one
+# gam_formula <- as.formula(
+#   "diagnosis ~
+#      s(concave.points_mean) + s(radius_se) + s(smoothness_se) +
+#      s(radius_worst) + s(texture_worst) +  s(concave.points_worst) +
+#      # interactions (tensor product smooths)
+#      ti(radius_worst, concave.points_worst)"
+# )
+# #0.9597 
+
+# predictors <- training |>
+#   select(where(is.numeric)) |>
+#   names()
+# 
+# # build GAM formula automatically: s(var1) + s(var2) + ...
+# smooth_terms <- paste0("s(", predictors, ")", collapse = " + ")
+# gam_formula <- as.formula(paste("diagnosis ~", smooth_terms))
+
+# Fit the GAM (binomial family for logistic)
+set.seed(42)
+gam_model <- gam(gam_formula, data = training, family = binomial(link = "logit"),
+                 method = "REML", select = TRUE)
+
+# Model summary (check significant smooths and interactions)
+summary(gam_model)
+#plot(gam_model, pages = 1, rug = TRUE)  # visual checks
+
+# Predict probabilities on the test set
+prob_test <- predict(gam_model, newdata = test, type = "response")
+
+# Convert probabilities to class labels (threshold 0.5; change if you want sensitivity-weighted)
+pred_class <- factor(ifelse(prob_test >= 0.5, "M", "B"), levels = levels(training$diagnosis))
+
+# Confusion matrix
+conf_mat <- confusionMatrix(pred_class, test$diagnosis, positive = "M")
+print(conf_mat)
+
+accuracy <- mean(pred_class == test$diagnosis)
+```
+
+
+```{r}
+# Robust IPC fit helper ----------------------------------------------------
+fit_ipc_safe <- function(df, prob_col = "prob", intervent_col = "intervene", verbose = TRUE) {
+  # required packages
+  if (!requireNamespace("stats", quietly = TRUE)) stop("stats package required")
+  
+  # Basic checks
+  if (!(prob_col %in% names(df))) stop("prob column not found: ", prob_col)
+  if (!(intervent_col %in% names(df))) stop("intervene column not found: ", intervent_col)
+  
+  x_raw <- df[[prob_col]]
+  y_raw <- df[[intervent_col]]
+  
+  # Report problematic rows
+  bad_idx <- which(!is.finite(x_raw) | is.na(x_raw) | !is.finite(y_raw) | is.na(y_raw))
+  if (length(bad_idx) > 0) {
+    if (verbose) {
+      message("Found non-finite / NA rows. Showing up to 10 of them:")
+      print(utils::head(df[bad_idx, , drop = FALSE], 10))
+    }
+    # Option: drop them
+    df <- df[-bad_idx, , drop = FALSE]
+    x_raw <- df[[prob_col]]; y_raw <- df[[intervent_col]]
+  }
+  
+  # Coerce intervene to numeric 0/1 if needed
+  if (!is.numeric(y_raw)) {
+    if (verbose) message("Converting intervene to numeric 0/1 based on unique values.")
+    # attempt smart conversion
+    if (all(levels(as.factor(y_raw)) %in% c("0","1"))) {
+      y_raw <- as.numeric(as.character(y_raw))
+    } else {
+      # map anything truthy to 1, others 0 (common cases: TRUE/FALSE, "yes"/"no", "Y"/"N")
+      y_raw <- as.character(y_raw)
+      y_raw_lower <- tolower(y_raw)
+      y_raw_num <- ifelse(y_raw_lower %in% c("1","t","true","yes","y"), 1L,
+                          ifelse(y_raw_lower %in% c("0","f","false","no","n"), 0L, NA))
+      if (any(is.na(y_raw_num))) {
+        stop("Cannot safely convert intervene column to 0/1. Inspect values: ",
+             paste(unique(y_raw)[1:min(10, length(unique(y_raw)))], collapse = ", "))
+      }
+      y_raw <- y_raw_num
+    }
+  }
+  
+  # clamp probabilities into (eps, 1-eps)
+  eps <- 1e-8
+  if (any(x_raw <= 0 | x_raw >= 1)) {
+    if (verbose) message("Clamping probabilities into (", eps, ", ", 1 - eps, ").")
+    x_raw <- pmin(pmax(x_raw, eps), 1 - eps)
+  }
+  
+  # rebuild cleaned df
+  df_clean <- data.frame(prob = as.numeric(x_raw), intervene = as.numeric(y_raw))
+  if (nrow(df_clean) < 10) stop("Too few rows after cleaning: ", nrow(df_clean))
+  
+  # IPC helper functions (safe transforms)
+  ipc_fun <- function(params, x) {
+    # params: c(mu, log_sigma, logit_C0, logit_C1)
+    mu <- params[1]
+    sigma <- exp(params[2])        # enforce >0
+    C0 <- 1 / (1 + exp(-params[3]))  # plogis
+    C1 <- 1 / (1 + exp(-params[4]))
+    # make sure sum <= 0.999
+    ssum <- C0 + C1
+    if (ssum >= 0.999) {
+      C0 <- C0 * 0.999 / ssum
+      C1 <- C1 * 0.999 / ssum
+    }
+    # safe pnorm call
+    p <- stats::pnorm((x - mu) / sigma)
+    (1 - C0 - C1) * p + C0
+  }
+  
+  ipc_rss <- function(par, x, y) {
+    # return large finite value if any NA/NaN occurs
+    preds <- tryCatch(ipc_fun(par, x), error = function(e) rep(NA_real_, length(x)))
+    if (any(!is.finite(preds))) return(1e30)
+    sum((y - preds)^2)
+  }
+  
+  # sensible initial params:
+  mu0 <- mean(df_clean$prob)        # center
+  sigma0 <- max(0.05, sd(df_clean$prob) / 3)  # positive
+  # C0 = observed min proportion; C1 = 1 - observed max proportion (rough)
+  # Estimate empirical low/high offsets by small bins:
+  b <- cut(df_clean$prob, breaks = seq(0,1,by = 0.05), include.lowest = TRUE)
+  agg <- aggregate(df_clean$intervene, by = list(b), FUN = mean)
+  C0_init <- min(agg$x, na.rm = TRUE)
+  C1_init <- 1 - max(agg$x, na.rm = TRUE)
+  C0_init <- pmin(pmax(C0_init, 0.001), 0.2)  # reasonable range
+  C1_init <- pmin(pmax(C1_init, 0.001), 0.99)
+  
+  init <- c(mu0, log(sigma0), qlogis(C0_init), qlogis(C1_init))
+  names(init) <- c("mu", "log_sigma", "logit_C0", "logit_C1")
+  if (verbose) {
+    message("Initial params (mu, sigma, C0, C1): ",
+            paste(round(c(mu0, sigma0, C0_init, C1_init), 4), collapse = ", "))
+  }
+  
+  # run optim with protections
+  opt_try <- tryCatch({
+    stats::optim(par = init, fn = ipc_rss, x = df_clean$prob, y = df_clean$intervene,
+                 method = "L-BFGS-B",
+                 lower = c(-5, log(1e-6), qlogis(1e-6), qlogis(1e-6)),
+                 upper = c(5, log(5), qlogis(0.999), qlogis(0.999)),
+                 control = list(maxit = 2000))
+  }, error = function(e) e)
+  
+  if (inherits(opt_try, "error") || opt_try$convergence != 0) {
+    if (verbose) message("optim failed or did not converge; trying nlminb fallback...")
+    # fallback to nlminb (often more stable)
+    nl_try <- tryCatch({
+      stats::nlminb(start = init, objective = ipc_rss, x = df_clean$prob, y = df_clean$intervene,
+                    control = list(iter.max = 2000, eval.max = 2000))
+    }, error = function(e) e)
+    
+    if (inherits(nl_try, "error") || nl_try$convergence != 0) {
+      stop("Both optim and nlminb failed. Last nlminb output:\n",
+           capture.output(str(nl_try)))
+    } else {
+      opt_res <- nl_try
+      par_hat <- nl_try$par
+      value <- nl_try$objective
+    }
+  } else {
+    opt_res <- opt_try
+    par_hat <- opt_try$par
+    value <- opt_try$value
+  }
+  
+  # convert back to natural params
+  mu_hat <- par_hat[1]
+  sigma_hat <- exp(par_hat[2])
+  C0_hat <- 1 / (1 + exp(-par_hat[3]))
+  C1_hat <- 1 / (1 + exp(-par_hat[4]))
+  # enforce sum <= 0.999
+  if ((C0_hat + C1_hat) >= 0.999) {
+    scale <- 0.999 / (C0_hat + C1_hat)
+    C0_hat <- C0_hat * scale; C1_hat <- C1_hat * scale
+  }
+  TO <- mu_hat - sigma_hat
+  TI <- mu_hat + sigma_hat
+  
+  res <- list(
+    params_raw = par_hat,
+    mu = mu_hat,
+    sigma = sigma_hat,
+    C0 = C0_hat,
+    C1 = C1_hat,
+    TO = TO,
+    TI = TI,
+    rss = value,
+    optim_res = opt_res,
+    df_clean = df_clean
+  )
+  class(res) <- "ipc_fit"
+  if (verbose) {
+    message("Fit complete. TO=", round(TO,4), " TI=", round(TI,4),
+            " C0=", round(C0_hat,4), " C1=", round(C1_hat,4))
+  }
+  res
+}
+
+# Example usage:
+# df <- data.frame(prob = prob_test, intervene = as.integer(test$invasive_flag))
+# ipc_res <- fit_ipc_safe(df)
+# ipc_res
+
+# Plot helper (if fit successful)
+plot.ipc_fit <- function(ipc_res) {
+  dfc <- ipc_res$df_clean
+  newx <- seq(0,1,length.out = 400)
+  parvec <- ipc_res$params_raw
+  ipc_fun_local <- function(par, x) {
+    mu <- par[1]; sigma <- exp(par[2]); C0 <- 1/(1+exp(-par[3])); C1 <- 1/(1+exp(-par[4]))
+    if ((C0+C1)>=0.999){ scale<-0.999/(C0+C1); C0<-C0*scale; C1<-C1*scale }
+    (1 - C0 - C1) * pnorm((x - mu)/sigma) + C0
+  }
+  pred_line <- ipc_fun_local(parvec, newx)
+  df_bins <- dfc %>%
+    dplyr::mutate(bin = cut(prob, breaks = seq(0,1,by=0.02), include.lowest = TRUE)) %>%
+    dplyr::group_by(bin) %>%
+    dplyr::summarize(prob_mean = mean(prob), prop = mean(intervene), n = n()) %>%
+    dplyr::filter(!is.na(prob_mean))
+  library(ggplot2)
+  ggplot() +
+    geom_point(data = df_bins, aes(x = prob_mean, y = prop, size = n), alpha = 0.6) +
+    geom_line(data = data.frame(prob = newx, ipc = pred_line), aes(prob, ipc), color = "blue", size = 1) +
+    geom_vline(xintercept = c(ipc_res$TO, ipc_res$TI), linetype = "dashed", color = "red") +
+    labs(x = "predicted probability", y = "observed intervention rate",
+         title = "IPC fit") +
+    theme_minimal()
+}
+
+```
+
+```{r}
+df <- data.frame(prob = prob_test, intervene = as.integer(test$invasive_flag))
+ipc_res <- fit_ipc_safe(df)
+plot(ipc_res)
+
+```
+
+
+
+```{r}
+# Requires: stats (base)
+library(stats)
+
+# Example inputs: vecs of length N
+# probs = predicted probabilities (0..1)
+# inter = intervention indicator (0/1)
+
+fit_ipc_once <- function(probs, inter, breaks = seq(0,1,by=0.05)) {
+  # bin into equal-width bins
+  bin <- cut(probs, breaks = breaks, include.lowest = TRUE, right = FALSE)
+  df <- aggregate(inter, by = list(bin=bin), FUN = function(x) c(n=length(x), sum=sum(x)))
+  # unpack
+  n <- sapply(df$x, "[", 1)
+  sums <- sapply(df$x, "[", 2)
+  # compute mean prob per bin (use midpoints or mean actual probs)
+  mids <- tapply(probs, bin, mean)
+  prop <- sums / n
+  df2 <- data.frame(x = as.numeric(mids), prop = prop, n = n)
+  df2 <- na.omit(df2)
+
+  # IPC function: (1 - C0 - C1) * pnorm((x - mu)/sigma) + C0
+  # initial params (simple guesses)
+  start <- list(mu = 0.2, sigma = 0.1, C0 = 0, C1 = 0.3)
+  nlsfit <- nls(prop ~ (1 - C0 - C1) * pnorm((x - mu)/sigma) + C0,
+                data = df2,
+                start = start,
+                algorithm = "port",
+                lower = c(mu = -1, sigma = 1e-6, C0 = 0, C1 = 0),
+                upper = c(mu = 2,    sigma = 1,      C0 = 1, C1 = 1),
+                trace = FALSE,
+                control = nls.control(maxiter = 200))
+  co <- coef(nlsfit)
+  mu <- co["mu"]; sigma <- co["sigma"]; C0 <- co["C0"]; C1 <- co["C1"]
+  T_O <- mu - sigma
+  T_I <- mu + sigma
+  return(list(mu=mu, sigma=sigma, C0=C0, C1=C1, T_O=T_O, T_I=T_I, fit = nlsfit, binned = df2))
+}
+
+# Bootstrap + dither approach
+fit_ipc_bootstrap <- function(probs, inter, B = 100, breaks = seq(0,1,by=0.05), dither_sd = 0.01) {
+  res <- replicate(B, {
+    idx <- sample(seq_along(probs), replace = TRUE)
+    p2 <- probs[idx] + rnorm(length(idx), sd = dither_sd) # dither
+    p2 <- pmin(1, pmax(0, p2))
+    it2 <- inter[idx]
+    s <- tryCatch(fit_ipc_once(p2, it2, breaks = breaks), error = function(e) NULL)
+    if (is.null(s)) return(NA)
+    c(mu = s$mu, sigma = s$sigma, C0 = s$C0, C1 = s$C1, T_O = s$T_O, T_I = s$T_I)
+  }, simplify = "array")
+  res <- t(res)
+  colnames(res) <- c("mu","sigma","C0","C1","T_O","T_I")
+  # remove rows with NA (failed fits)
+  res <- res[complete.cases(res), , drop = FALSE]
+  # point estimates = medians; CI = 2.5/97.5 percentiles
+  est <- apply(res, 2, median)
+  ci_low <- apply(res, 2, quantile, 0.025)
+  ci_high <- apply(res, 2, quantile, 0.975)
+  return(list(samples = res, est = est, ci_low = ci_low, ci_high = ci_high))
+}
+
+# USAGE example (replace probs/inter with your data)
+out <- fit_ipc_bootstrap(prob_test, df$diagnosis, B = 100, breaks = seq(0,1,by=0.05))
+out$est["T_O"]; out$est["T_I"]
+out$ci_low["T_O"]; out$ci_high["T_I"]
+
+```
+```{r}
+df$diagnosis[1:20]
+```
+```{r}
+# Robust IPC fit + bootstrap (handles empty bins and alignment correctly)
+ipc_fit_once <- function(probs, inter, breaks = seq(0,1,by=0.05)) {
+  if (length(probs) != length(inter)) stop("probs and inter must be same length")
+  # assign bins
+  bins <- cut(probs, breaks = breaks, include.lowest = TRUE, right = FALSE)
+  # number in each bin
+  ns <- as.integer(tapply(probs, bins, length))
+  # sum of interventions in each bin (NA for empty)
+  sums <- as.numeric(tapply(inter, bins, sum))
+  # mean prob per bin (NA for empty)
+  means <- as.numeric(tapply(probs, bins, mean))
+  # keep only bins with at least one observation
+  ok <- which(ns > 0 & !is.na(means) & !is.na(sums))
+  if (length(ok) < 4) {
+    # not enough bins to fit reliably
+    return(rep(NA_real_, 6))
+  }
+  x_vals <- means[ok]
+  prop_vals <- sums[ok] / ns[ok]
+
+  bdf <- data.frame(x = x_vals, prop = prop_vals)
+
+  # initial guesses
+  start_vals <- list(mu = median(bdf$x), sigma = 0.1, C0 = 0, C1 = 0.1)
+  fit <- tryCatch({
+    nls(prop ~ (1 - C0 - C1) * pnorm((x - mu)/sigma) + C0,
+        data = bdf,
+        start = start_vals,
+        algorithm = "port",
+        lower = c(mu=-1, sigma=1e-6, C0=0, C1=0),
+        upper = c(mu=2,  sigma=1,    C0=1, C1=1),
+        control = nls.control(maxiter = 200))
+  }, error = function(e) NULL)
+
+  if (is.null(fit)) return(rep(NA_real_, 6))
+
+  co <- coef(fit)
+  mu <- co["mu"]; sigma <- co["sigma"]; C0 <- co["C0"]; C1 <- co["C1"]
+  T_O <- mu - sigma; T_I <- mu + sigma
+  c(mu = mu, sigma = sigma, C0 = C0, C1 = C1, T_O = T_O, T_I = T_I)
+}
+
+fit_ipc_bootstrap <- function(probs, inter, B = 100,
+                              breaks = seq(0,1,by=0.05), dither_sd = 0.01) {
+  if (length(probs) != length(inter)) stop("probs and inter must be same length")
+  N <- length(probs)
+  results <- matrix(NA_real_, nrow = B, ncol = 6)
+  colnames(results) <- c("mu","sigma","C0","C1","T_O","T_I")
+
+  for (b in seq_len(B)) {
+    idx <- sample.int(N, N, replace = TRUE)
+    p2 <- probs[idx] + rnorm(N, mean = 0, sd = dither_sd)
+    p2 <- pmin(1, pmax(0, p2))  # keep in [0,1]
+    i2 <- inter[idx]
+    results[b, ] <- ipc_fit_once(p2, i2, breaks = breaks)
+  }
+
+  good <- apply(!is.na(results), 1, any)
+  if (!any(good)) stop("All IPC fits failed. Try different breaks or check data.")
+  samples_good <- results[good, , drop = FALSE]
+
+  est <- apply(samples_good, 2, median, na.rm = TRUE)
+  ci_low  <- apply(samples_good, 2, quantile, 0.025, na.rm = TRUE)
+  ci_high <- apply(samples_good, 2, quantile, 0.975, na.rm = TRUE)
+
+  list(samples = samples_good, est = est, ci_low = ci_low, ci_high = ci_high)
+}
+
+
+
+out <- fit_ipc_bootstrap(prob_train, y_train, B = 100, breaks = seq(0,1,by=0.05))
+
+out$est
+out$ci_low
+out$ci_high
+
+```
+
+```{r}
+prob_train <- predict(cvfit, newx = X_train, 
+                     s = "lambda.min", 
+                     type = "response")
+prob_train <- as.numeric(prob_train)
+length(prob_test)
+length(df$diagnosis)
+```
+
+```{r}
+#train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+diagnosis_train <- df[train_idx, ][, -1]
+diagnosis_train
+```
+

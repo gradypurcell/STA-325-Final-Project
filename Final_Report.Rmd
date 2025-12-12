@@ -130,8 +130,8 @@ was recorded in three forms:
 The response variable is the diagnosis: malignant (M) or benign (B).
 
 There are 569 observations, including 357 benign (62.7%) and 212
-malignant (37.2%) cases. Although benign tumors are more common, the
-dataset is only moderately imbalanced, so rebalancing procedures such as
+malignant (37.2%) cases. Although benign tumors are more common in the dataset, 
+the dataset is only moderately imbalanced, so rebalancing procedures such as
 SMOTE or class weighting are not necessary for this analysis.
 
 The dataset contains no missing values, and all predictors were
@@ -145,9 +145,11 @@ analysis (EDA) and model interpretation because each predictor has a
 clear biological meaning and can be reasoned about in clinical terms
 (e.g., radius relates to tumor size, concavity relates to irregularity).
 
+** INCLUDE CHOSEN PREDICTORS IN MODEL
+
 # **Methodology**
 
-Our methodology consists of three main stages: exploratory data
+Our methodology consists of five main stages: exploratory data
 analysis, threshold optimization and evaluation, preliminary model
 comparison, regularized model selection, and nonlinear modeling with
 generalized additive models (GAMs).
@@ -164,6 +166,9 @@ applied to our model.
 As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
 
 Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
+
+** LAURA INCLUDE THRESHOLD FOR PROBABILITY
+
 
 ## Exploratory Data Analysis (EDA)
 
@@ -192,12 +197,39 @@ included histograms, boxplots, and scatterplots across both classes
 
 Although certain variables showed skewed distributions, which is
 expected in biological measurements, none raised concerns severe enough
-to justify transformation. Outliers were examined but ultimately
-retained, as they reflect real biological variation rather than
-measurement error. No missing data were present, so no imputation or
-deletion procedures were required. The EDA thus served primarily to
-guide expectations about predictor behavior and to inform our choice of
-appropriate models.
+to justify transformation. Outliers were examined but ultimately retained, 
+as they reflect real biological variation rather than measurement error. 
+No missing data were present, so no imputation or deletion procedures were 
+required. The EDA thus served primarily to guide expectations about predictor 
+behavior and to inform our choice of appropriate models.
+
+```{r}
+library(patchwork)
+df <- read.csv("Data/data.csv")
+
+# smoothness_worst vs concavity_worst
+p1 <- ggplot(df, aes(smoothness_worst, concavity_worst, color = diagnosis)) +
+  geom_point() +
+  geom_smooth(method = "gam") + 
+  ggtitle("Effect of Smoothness (Worst) and Concavity (Worst) on Diagnosis")
+
+# radius_worst vs concave.points_mean
+p2 <- ggplot(df, aes(radius_worst, concave.points_mean, color = diagnosis)) +
+  geom_point() +
+  geom_smooth(method = "gam") + 
+  ggtitle("Effect of Radius (Worst) and Concave Points (Worst) on Diagnosis")
+
+# fractal_dimension_se vs concavity_worst
+p3 <- ggplot(df, aes(fractal_dimension_se, concavity_worst, color = diagnosis))+
+  geom_point() +
+  geom_smooth(method = "gam") + 
+  ggtitle("Effect of Fractal Dimension (SE) and Concavity (Worst) on Diagnosis")
+
+
+(p1 | p2 | p3) + plot_layout(guides = "collect")
+```
+
+We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure ___, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors. 
 
 ## Preliminary Model Fitting
 
@@ -232,6 +264,8 @@ understand. This structure directly supports the project’s
 interpretability goals and meets the rubric requirement for
 communicating results to individuals outside the field.
 
+* get rid of decision tree stuff here?
+
 ## Regularized Logistic Regression and Feature Selection
 
 We first fit a LASSO logistic model to perform variable selection and establish a
@@ -251,7 +285,7 @@ perfect sensitivity and strong specificity.
 From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From our cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
 
 ```{r}
-df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+df <- read.csv("Data/data.csv")
 df <- df |> select(-X)
 df <- data.frame(df)
 
@@ -331,7 +365,7 @@ plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
      legacy.axes=TRUE)
 ```
 
-The last step after building the LASSO logistic model was exracting the features which had non-zero coefficients for predicting the probability of a tumor being benign or malignant. Below is a list of the 13 features (out of 30) which the LASSO model indicated were important for predicting the probabilities ordered in descending order of magnitude. 
+The last step after building the LASSO logistic model was extracting the features which had non-zero coefficients for predicting the probability of a tumor being benign or malignant. Below is a list of the 13 features (out of 30) which the LASSO model indicated were important for predicting the probabilities ordered in descending order of magnitude. 
 ```{r, eval=TRUE}
 # Extracting the coefficient features
 coef_min <- coef(cvfit, s = "lambda.min")
