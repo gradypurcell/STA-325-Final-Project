@@ -219,6 +219,10 @@ negatives (missing a malignant tumor) versus false positives
 (unnecessary further testing), and will guide our final decision rule
 applied to our model. 
 
+In our cost analysis, we have prioritized the care of the patient over everything. We are steadfast in our commitment to correctly reporting when cancer is present due to recovery being more possible when caught early. According to Dr. Grayson from University of Texas Medical Branch, a woman's psychological state determines her ability to be responsive to treatment. She emphasizes the urgency of diagnosis to ensure women are confident in the support and care they receive. She affirms that there is a mental cost in delaying treatment as the condition worsens and so do spirits of hope.
+
+Additionally, we have found that patients who are able to receive their diagnosis earlier are subject to a more cost efficient treatment than a patients who receive their diagnosis in say stage IV. According to WebMD, women who are able to obtain care in the primary stages of cancer when the tumor is small and localized pay \$48,500 on average whereas a woman who obtains care during stage IV is likely to pay \$183,00.* (note that these are averages and insurance alleviation may differ from woman to woman) We prioritize this concern as 1 in 13 women report cancer treatment costs are higher than intitially anticipated, so much so that women also report avoiding going to the doctor in fear of having to pay an exuberant amount. Moreover, when cancer is caught late, it places a stressor on the hospital as well; in some cases, the hospital itself may not be equipped to handle an influx of patients with stage IV cancer but would be better equipped to eliminate cancer had it been caught earlier. Consequently, it is our goal to diagnosis tumor as malignant in women as soon as possible to optimize results and minimize financials in every domain.
+
 As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
 
 Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
@@ -736,6 +740,12 @@ Another limitation is that the predictors are based on computed summary statisti
 # **Conclusion**
 
 ## Future Analysis
+
+Further analysis in the cancer field is pivotal as healthcare advancements are vast and rapidy growinf to fulfill the needs of patients. With that, we have prioritized recommendations on how to best optimize future research on Breast Cancer Diagnosis. We suggest investigating the interaction effects between stages of cancer and existing variables. We affirm that this insight would provide important information to healthcare professionals when it comes to assessing urgency in diagnosis. According to the CDC, most breast cancer diagnosis are caught in the early stages, but when caught in a later stage, the cancer has likely spread to other organs which would coincide with the results we gathered from our model (ie, as radius increases so does the probability of cancer). 
+
+Another suggestion for future work would be to include age, race/ethnicity and socioeconomic class in the data. Not only would this allow us to see how we can ensure proper representation, but also, according to the American Cancer Society, these three factors actually play a role in what stage of cancer (and thus the probability the tumor is malignant or begin) the diagnosis is received. 
+
+Our findings have crafted the framework for future researchers to continuously test our model with recent data, and we encourage others to expand on our results with suggestions above or beyond.
 
 # **References**
 Github: https://github.com/gradypurcell/STA-325-Final-Project.git  
