@@ -86,23 +86,9 @@ malignancy, we provide insights that can inform research, guide
 clinicians’ early decision making, and support the development of future
 diagnostic tools designed to complement, not replace, medical expertise.
 
-## Downstream Uses of the Model
+## Overview of Proposed Methodology
 
-Our final predictive model can serve several downstream purposes.
-Clinicians may use a model derived malignancy probability as a
-preliminary triage tool to help determine urgency of follow up imaging
-or need for biopsy. Researchers may use our inferred feature importance
-patterns to better understand structural characteristics of malignant
-tissue, signaling which measurements warrant closer attention in future
-imaging protocols. In healthcare settings, such tools can also guide
-resource allocation by highlighting high risk cases sooner, especially
-when imaging workloads are high (with over 42 million mammograms
-performed annually across the US and UK, Nature 2020).
-
-By ensuring that our model is interpretable and clearly justified, it
-can be used ethically and effectively in supporting clinical workflows,
-improving early detection, and helping reduce false positives which have
-been long recognized as a challenge in mammographic screening.
+Since we are building our model to assist doctors with diagnosing cancer patients, our model needs to be interpretable so doctors are more confident in their diagnosis and can explain the factors which led to the final diagnosis. To do this, we will first use a LASSO logistic regression model to shrink the features so that only relevant features are included in the final model. Shrinkage is important in this setting because it is likely that there is multicorrelation between many of the features so we don't want our final model to include all of the features. Once the LASSO logistic model provides the relevant features, we will build a Generalized Additive Model (GAM) since our EDA has indicated nonlinearity between the predictors and state of the tumor, so we want our final model to have a balance between flexibility and interpretability. After selecting which features should be included as non-linear splines in the model, we will then include interactions based on exploratory analysis, domain knowledge, and model performance. 
 
 # **Data**
 
@@ -134,7 +120,7 @@ malignant (37.2%) cases. Although benign tumors are more common in the dataset,
 the dataset is only moderately imbalanced, so rebalancing procedures such as
 SMOTE or class weighting are not necessary for this analysis.
 
-The dataset contains no missing values, and all predictors were
+The data contains no missing values, and all predictors were
 standardized with four significant digits in the version we downloaded.
 Because the features are continuous, structured, and well behaved, this
 dataset is well suited for multiple modeling approaches including
@@ -145,30 +131,14 @@ analysis (EDA) and model interpretation because each predictor has a
 clear biological meaning and can be reasoned about in clinical terms
 (e.g., radius relates to tumor size, concavity relates to irregularity).
 
-** INCLUDE CHOSEN PREDICTORS IN MODEL
+The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texure, smoothness, concavity, concave points and symmetry.
 
-# **Methodology**
+# **Modeling Methodology**
 
 Our methodology consists of five main stages: exploratory data
 analysis, threshold optimization and evaluation, preliminary model
 comparison, regularized model selection, and nonlinear modeling with
 generalized additive models (GAMs).
-
-## Cost Analysis and Threshold Selection 
-
-We then researched the cost of false positives and negatives to compute
-a cost based loss function to determine the optimal classification
-threshold. This threshold will reflect the asymmetric cost of false
-negatives (missing a malignant tumor) versus false positives
-(unnecessary further testing), and will guide our final decision rule
-applied to our model. 
-
-As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
-
-Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
-
-** LAURA INCLUDE THRESHOLD FOR PROBABILITY
-
 
 ## Exploratory Data Analysis (EDA)
 
@@ -187,7 +157,6 @@ library(tidyr)
 library(knitr)
 library(kableExtra)
 ```
-
 
 We began by conducting a comprehensive exploratory data analysis to
 understand the distribution of each of the 30 predictors and to identify
@@ -231,6 +200,21 @@ p3 <- ggplot(df, aes(fractal_dimension_se, concavity_worst, color = diagnosis))+
 
 We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure ___, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors. 
 
+## Cost Analysis and Threshold Selection 
+
+We then researched the cost of false positives and negatives to compute
+a cost based loss function to determine the optimal classification
+threshold. This threshold will reflect the asymmetric cost of false
+negatives (missing a malignant tumor) versus false positives
+(unnecessary further testing), and will guide our final decision rule
+applied to our model. 
+
+As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
+
+Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
+
+** LAURA INCLUDE THRESHOLD FOR PROBABILITY
+
 ## Preliminary Model Fitting
 
 We next fit several classification models to evaluate baseline
@@ -258,7 +242,10 @@ providing a concise, clinically meaningful set of predictors and
 potential interactions.
 
 After selecting these top predictors, we further fit a GAM informed by
-the LASSO selected features. Decision trees offer high interpretability,
+the LASSO selected features. We selected a GAM model for interpretability and flexibility in including nonlinear terms. GAM models are more interpretable than many other 
+
+
+Decision trees offer high interpretability,
 producing decision rules that patients and clinicians can easily
 understand. This structure directly supports the project’s
 interpretability goals and meets the rubric requirement for
@@ -281,7 +268,6 @@ achieved approximately 99% accuracy on the held-out test set, with
 perfect sensitivity and strong specificity. 
 
 ### Setting the Optimal Threshold
-
 From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From our cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
 
 ```{r}
@@ -357,13 +343,6 @@ spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
 ```
 
 Model performance was further evaluated using an ROC curve and a measure of AUC, providing a threshold-independent measure of discrimination. The AUC for the ROC curve is 0.9994 which is fairly high, giving us confidence in our model. 
-```{r}
-auc_val <- auc(roc_obj)
-#print(auc_val)
-plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
-     xlab = "1 - Specificity",
-     legacy.axes=TRUE)
-```
 
 The last step after building the LASSO logistic model was extracting the features which had non-zero coefficients for predicting the probability of a tumor being benign or malignant. Below is a list of the 13 features (out of 30) which the LASSO model indicated were important for predicting the probabilities ordered in descending order of magnitude. 
 ```{r, eval=TRUE}
@@ -406,7 +385,6 @@ kable(
   align = "c"
 )
 ```
-
 
 In summary, the LASSO logistic model yielded a parsimonious subset of clinically
 interpretable predictors, which served two purposes:
@@ -487,10 +465,30 @@ interpretable through smooth and interaction visualizations, and aligned
 with the project’s emphasis on transparency and trust in medical
 decision making.
 
+## Downstream Uses of the Model
+
+Our final predictive model can serve several downstream purposes.
+Clinicians may use a model derived malignancy probability as a
+preliminary triage tool to help determine urgency of follow up imaging
+or need for biopsy. Researchers may use our inferred feature importance
+patterns to better understand structural characteristics of malignant
+tissue, signaling which measurements warrant closer attention in future
+imaging protocols. In healthcare settings, such tools can also guide
+resource allocation by highlighting high risk cases sooner, especially
+when imaging workloads are high (with over 42 million mammograms
+performed annually across the US and UK, Nature 2020).
+
+By ensuring that our model is interpretable and clearly justified, it
+can be used ethically and effectively in supporting clinical workflows,
+improving early detection, and helping reduce false positives which have
+been long recognized as a challenge in mammographic screening.
+
+# **Results**
+
 ## Limitations
 
 One limitation is that the data is from 1995. While our work provides proof of concept modeling, future work can expand upon these findings by utilizing modern imaging technology (3D mammography, MRI, MBI) that can can detect additional features. Another limitation is that the predictors are based on computed summary statistics for each tumor (mean, SE, "worst"). Although having these values provide general trends, they may fail to capture specific nuances to tumor characteristics compared to using raw imaging data. An additional limitation to the models selected, lasso logistic regression and GAMs, is that important nonlinear or interaction effects may be overlooked, since regression relies on linear assumption and GAMs may fail to capture complex, higher-order interactions between tumor features. 
 
-## Conclusion
+# **Conclusion**
 
 ## Future Analysis
