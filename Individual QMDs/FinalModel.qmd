@@ -1,0 +1,608 @@
+# QMD for the Final Model
+
+## Reading in the data and packages
+```{r}
+# Loading the packages
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(class)
+library(caret)
+library(pROC)
+library(glmnet)
+library(GGally)
+library(mgcv)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(purrr)
+library(patchwork)
+
+```
+
+Loading the data
+```{r}
+# Loading the data
+df <- read.csv("~/STA-325-Final-Project/Data/data.csv")
+df <- df |> select(-X)
+df <- data.frame(df)
+
+# Adding a categorical variable for diagnosis
+df$diagnosis <- ifelse(df$diagnosis == "M", 1, 0)
+df <- df[ , !names(df) %in% c("id", "X", "Unnamed..32") ] # remove id columns
+
+```
+
+## Lasso Logistic Model
+```{r}
+# Preparing the data for the train/test split
+X <- model.matrix( ~ ., data = df)[, -1]
+y <- df$diagnosis
+
+# Train/test split
+set.seed(123) 
+n <- nrow(X)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_idx, ][, -1]
+X_test  <- X[-train_idx, ][, -1]
+y_train <- y[train_idx]
+y_test  <- y[-train_idx]
+```
+
+Building the Lasso model using 5-fold cross validation. 
+```{r}
+cvfit <- cv.glmnet(
+  x = X_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,        # LASSO
+  nfolds = 5        # 5-fold CV
+)
+
+```
+
+Model diagnostics for the lasso model.
+```{r}
+plot(cvfit) 
+print(cvfit$lambda.min)
+```
+
+Extracting the coefficients from the Lasso model.
+```{r}
+# Extracting the coefficient features
+coef_min <- coef(cvfit, s = "lambda.min")
+coef_df <- as.data.frame(as.matrix(coef_min))
+coef_df$feature <- rownames(coef_df)
+names(coef_df)[1] <- "coefficient"
+
+# Filtering for coefficients which aren't 0
+feature_list <- coef_df |>
+  filter(feature != "(Intercept)") |> 
+  filter(coefficient != 0) |>
+  pull(feature)
+```
+### Optimal Threshold
+Since we are working on cancer detection, we want to minimize the false negative rate since we would prefer to incorrectly classify a tumor as malignant. In order to to this, we want to maximize sensitivity. Since sensitivity is already fairly high when we have a threshold at 0.5, we are going to find the threshold which gives us a maximal sensitivity level of 1.
+```{r}
+roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
+coords <- coords(roc_obj,
+       x = 1,
+       input = "sensitivity",
+       ret = c("threshold", "sensitivity", "specificity"))
+coords 
+```
+
+Setting the optimal threshold which falls within a range of outside research and is extracted from the code above. 
+```{r}
+# This is the variable that changes based on the threshold
+opt_threshold <- coords$threshold
+
+```
+
+### Model Diagnostics
+Getting the predicted probabilities based on the optimal threshold and minimal lambda value.
+```{r}
+# Predicted probabilities (logistic) at lambda.min
+prob_test <- predict(cvfit, newx = X_test, 
+                     s = "lambda.min", 
+                     type = "response")
+prob_test <- as.numeric(prob_test)
+
+# Predicted class based on the optimal threshold
+pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
+```
+
+Building the confusion matrix based on the predicted probabilities. We see below that there are no false negatives which is expected given the threshold we set maximizes sensitivity. 
+```{r}
+cm <- table(Predicted = pred_class, Actual = y_test)
+
+cm_df <- as.data.frame.matrix(cm)
+
+cm_labeled <- data.frame(
+  Outcome = c("Predicted Benign", "Predicted Malignant"),
+  Benign  = cm[, "0"],
+  Malignant = cm[, "1"]
+)
+
+kable(cm_labeled, caption = "Confusion Matrix", align = "c")
+
+```
+
+Gathering other metrics for the accuracy, sensitivity, and specificity. 
+```{r}
+accuracy <- mean(pred_class == y_test)
+sens <- sum(pred_class == 1 & y_test == 1) / sum(y_test == 1)
+spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
+c(accuracy = accuracy, sensitivity = sens, specificity = spec)
+
+```
+
+Plotting an AUC curve to assess model performance. 
+```{r}
+roc_obj <- roc(response = y_test, predictor = prob_test, positive = "1")
+auc_val <- auc(roc_obj)
+
+print(auc_val)
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
+     xlab = "1 - Specificity",
+     legacy.axes=TRUE)
+```
+Based on the model performance on the test data above, the model has high accuracy as well as sensitivity and specificity. 
+
+### Final Features
+The below features are the ones that the lasso logistic model kept in the model, so we will use these features for building the GAM model.
+```{r}
+print(feature_list)
+```
+
+## GAM Model
+Using the same training indices from the lasso logistic model but including the diagnosis. 
+```{r}
+# Getting the training dataframe
+X2 <- model.matrix( ~ ., data = df)[, -1]
+
+# Getting the dataframes
+train_df <- as.data.frame(X2[train_idx, ])
+test_df <- as.data.frame(X2[-train_idx, ])
+```
+
+### Deciding Splines to Use
+Using a variable which we know is in the final spline model (from the analysis below), we will test the predictive performance across three different types of splines:
+- Thin-Plate spline: Default type of spline with locations which are automatically choose. TP is oftne used for nonlinear relationships with minimal tuning. TP splines have an optimal smooth basis and are very smooth when considering interpretation. Performs well for high dimensional / multi-variate data. 
+- Cubic spline: Uses a fixed set of knots to create local piecewise polynomial fits. Cubic splines can be less interepretable with more local wiggles.
+- Thin Plate Shrinkage: Thin-Plate splines with extra penalty. 
+
+The method used is Restricted Maximum Likelihood (REML) which is a statistical technique for fitting linear models and estimating variance. REML is preferred over Maximum Likelihood because it provides less biased estimates for variance components.
+
+
+```{r}
+# Building the different models
+## Thin-Plate Splines
+m_tp  <- gam(diagnosis ~ s(compactness_se, bs = "tp", 
+                           k = 10), 
+            data = train_df,
+            family = binomial(link = "logit"), 
+            method = "REML")
+
+## Cubic Splines
+m_cr  <- gam(diagnosis ~ s(compactness_se, bs = "cr", 
+                           k = 10), 
+            data = train_df,
+            family = binomial(link = "logit"), 
+            method = "REML")
+
+## Thin-Plate Shrinkage
+m_tp_sel  <- gam(diagnosis ~ s(compactness_se, bs = "tp", 
+                           k = 10), 
+            data = train_df,
+            family = binomial(link = "logit"), 
+            method = "REML",
+            select = TRUE)
+```
+
+Comparing the different types of splines.
+```{r}
+models <- list(tp = m_tp, cr = m_cr, tp_sel = m_tp_sel)
+compare_df <- tibble(
+  model = names(models),
+  edf = map_dbl(models, ~ sum(summary(.x)$s.table[ , "edf"], na.rm = TRUE)),
+  logLik = map_dbl(models, logLik),
+  AIC = map_dbl(models, AIC),
+  REML = map_dbl(models, ~ .x$gcv.ubre) # optional measure stored in object
+)
+print(compare_df)
+```
+
+Overall, the thin-plate spline has the lowest log-likelihood while cubic spline has lower AIC and REML. Given that these findings contradict each other it is unclear which type of spline is best. Thus, we will select cubic splines because we are more familiar with cubic splines as piecewise cubic polynimals with knots. They are also computationally cheap and work well for simple 1D smooths as they are stable and predictable. Additionally, we are prioritizing interpretable models and cubic splines are preferred for interpretable 1D smooths. 
+
+To support our findings, we also built a visual to compare the fit of these models across different ranges of smoothness_se.
+```{r}
+#prepare grid across smoothness_se
+grid <- tibble(compactness_se = seq(min(train_df$compactness_se, na.rm = TRUE),
+                            max(train_df$compactness_se, na.rm = TRUE),
+                            length.out = 200))
+
+preds <- map_dfr(models, function(mod) {
+  p_link <- predict(mod, newdata = grid, type = "link", 
+                    se.fit = TRUE)
+  tibble(
+    compactness_se = grid$compactness_se,
+    model = deparse(substitute(mod)),  # we'll replace model name next
+    fit_link = p_link$fit,
+    se_link  = p_link$se.fit,
+    fit_resp = plogis(p_link$fit),                 # inverse logit -> predicted probability
+    upr = plogis(p_link$fit + 2 * p_link$se.fit),
+    lwr = plogis(p_link$fit - 2 * p_link$se.fit)
+  )
+}, .id = "model_id")
+
+# fix model names: .id currently 1..n, replace with real names
+preds$model <- rep(names(models), each = nrow(grid))
+
+# Plot predicted probability (response scale)
+ggplot(preds, aes(x = compactness_se, y = fit_resp, color = model)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = model), alpha = 0.15, color = NA) +
+  theme_minimal() +
+  labs(y = "Predicted probability", title = "GAM spline basis comparison (binomial, logit link)")
+
+# If you want to examine the logit (link) scale instead:
+ggplot(preds, aes(x = compactness_se, y = fit_link, color = model)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = fit_link - 2*se_link, ymax = fit_link + 2*se_link, fill = model),
+              alpha = 0.12, color = NA) +
+  labs(y = "Fitted logit (link)", title = "Linear predictor (logit) across compactness_se")
+```
+
+From the visual above, it is clear that the thin-plate shrinkage spline does not perform the best given that the predicted probability does not change very much as the smoothness varies. We prefer to use the cubic spline given that it has a smaller standard error around its predicted probabilities and is less variable than the thin-plate spline. Additionally, the cubic spline is smoother so we have less concern with overfitting from the cubic spline.
+
+We have made the decision to use cubic splines for all splines in the model given they are easier to interpret and computationally cheaper. 
+
+### Deciding Which Variables To Include in Splines
+We know that we want to use cubic splines only for variables which show strong violation of non-linearity. All other variables can be included as main effects or in interaction terms. 
+
+The below code shows the estimated log-odds across different values for each of the selected features.
+```{r}
+nbins <- 20
+yvar <- "diagnosis"       # your binary outcome
+
+# Function that bins & plots one variable
+make_binned_plots <- function(df, xvar, yvar, nbins = 20) {
+  
+  # 1) Compute bins
+  binned <- df %>%
+    mutate(bin = ntile(.data[[xvar]], nbins)) %>%
+    group_by(bin) %>%
+    summarise(
+      x_mid = mean(.data[[xvar]], na.rm = TRUE),
+      n     = n(),
+      prop  = mean(.data[[yvar]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      se    = sqrt(prop * (1 - prop) / pmax(n, 1)),
+      lower = pmax(0, prop - 1.96 * se),
+      upper = pmin(1, prop + 1.96 * se),
+      eps   = 1e-3,
+      logit = log((prop + eps) / (1 - prop + eps))
+    )
+  
+  # 2) Proportion plot
+  p_prop <- ggplot(binned, aes(x = x_mid, y = prop)) +
+    geom_point(size = 2) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.01) +
+    labs(
+      title = paste("Binned proportion for", xvar),
+      x = xvar,
+      y = "Observed proportion"
+    ) +
+    theme_minimal()
+  
+  # 3) Logit plot
+  p_logit <- ggplot(binned, aes(x = x_mid, y = logit)) +
+    geom_point(size = 2) +
+    geom_smooth(method = "loess", se = TRUE) +
+    labs(
+      title = paste("Binned log-odds for", xvar),
+      x = xvar,
+      y = "Estimated log-odds"
+    ) +
+    theme_minimal()
+  
+  return(list(binned = binned, prop_plot = p_prop, logit_plot = p_logit))
+}
+
+# ---- Loop over all predictors ----
+results <- map(feature_list, ~ make_binned_plots(train_df, .x, yvar))
+names(results) <- feature_list
+```
+
+
+```{r}
+## Showing all of the plots
+p1 <- results[["smoothness_se"]]$logit_plot
+p2 <- results[["concave.points_mean"]]$logit_plot
+p3 <- results[["radius_se"]]$logit_plot
+p4 <- results[["radius_worst"]]$logit_plot
+p5 <- results[["texture_worst"]]$logit_plot
+p6 <- results[["smoothness_worst"]]$logit_plot
+p7 <- results[["concavity_worst"]]$logit_plot
+p8 <- results[["concave.points_worst"]]$logit_plot
+p9 <- results[["symmetry_worst"]]$logit_plot
+p10 <- results[["compactness_mean"]]$logit_plot
+p11 <- results[["texture_se"]]$logit_plot
+p12 <- results[["compactness_se"]]$logit_plot
+p13 <- results[["fractal_dimension_se"]]$logit_plot
+
+# Arranging the plots
+plots <- list(
+  p1, p2, p3, p4, p5, p6,
+  p7, p8, p9, p10, p11, p12, p13
+)
+
+wrap_plots(plots, ncol = 4) & 
+  theme(legend.position = "bottom")
+
+```
+When thinking about which variables to use in the splines, we want to find variables which appear to violate linearity. The list below is a preliminary list based on observations from the visual above:
+- smoothness_se
+- radius_worst
+- texture_worst
+- concavity_worst
+- concave.points_worst
+- symmetry_worst
+- texture_se
+- compactness_se
+
+Now, we want to quantitatively determine which features should be included as splines.
+
+```{r}
+results <- map_dfr(feature_list, function(var) {
+  
+  # build formulas
+  form_glm <- as.formula(paste("diagnosis ~", var))
+  form_gam <- as.formula(paste("diagnosis ~ s(", var, ", k=10)", sep = ""))
+  
+  # fit models
+  mod_glm <- glm(form_glm, data=train_df, family = binomial("logit"))
+  mod_gam <- gam(form_gam, data=train_df, bs="cr",
+                 family = binomial("logit"), method="REML")
+  
+  # AIC comparison
+  aic_vals <- AIC(mod_glm, mod_gam)
+  
+  # Likelihood ratio test (nested model test)
+  an <- anova(mod_glm, mod_gam, test="Chisq")
+  pval <- an$`Pr(>Chi)`[2]   # GAM vs GLM
+
+  
+  tibble(
+    variable = var,
+    glm_AIC  = aic_vals$AIC[1],
+    gam_AIC  = aic_vals$AIC[2],
+    delta_AIC = aic_vals$AIC[1] - aic_vals$AIC[2],
+    LRT_pvalue = an$`Pr(>Chi)`[2],  # the p-value comparing GLM vs GAM
+    significant_0.01 = ifelse(!is.na(pval) & pval < 0.01, "YES", "NO")
+
+  )
+})
+
+print(results)
+```
+
+When assessing the table above, we want to choose variabels which experience a significant change in their AIC value when included as a GAM instead of a GLM. Additionally, we want their p-values to be significant. Using benchmark values for GAM improvement, a change in AIC greater than 10 is very strong evidence for GAM improvement while a change between 4 and 10 indicates the GAM meaningfully improves fit. Using these benchmarks, we will apply a spline for any variabels with a change in AIC greater than 4.
+
+```{r}
+results |>
+  filter(abs(delta_AIC) > 4 & significant_0.01 == "YES")
+```
+
+Based on these benchmarks, we identify the following 5 features as those we will use as cubic splines in our final model while the other features will be included as main effects or interaction terms.
+1. texture_se
+2. compactness_se
+3. fractal_dimension_se
+4. texture_worst
+5. concavity_worst
+
+### GAM Model without Interactions
+Note: we chose to use bam() which is he big-data optimized version of gam() -- parallel, memory-efficient, and much faster. 
+```{r}
+formula_all <- diagnosis ~ 
+  s(texture_se, bs = "cr", k = 10) +
+  s(compactness_se, bs = "cr", k = 10) +
+  s(fractal_dimension_se, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) + 
+  compactness_mean  + concave.points_mean + radius_se + 
+  smoothness_se + radius_worst + smoothness_worst + concave.points_worst + 
+  symmetry_worst
+
+mod_all <- bam(formula_all,
+               data = train_df,
+               family = binomial(link = "logit"),
+               method = "fREML",
+               discrete = TRUE,      # huge speed boost
+               select = TRUE)
+```
+
+
+The summary of the model is output below:
+```{r}
+summary(mod_all)
+```
+
+We also used the GAM model to make predictions on the train dataset.
+```{r}
+df_pred <- train_df |>
+  mutate(.pred_prob = predict(mod_all, type = "response"),
+         .pred_link = predict(mod_all, type = "link"),
+         .pred_class_05 = as.integer(.pred_prob >= opt_threshold),
+         .obs = as.integer(!!rlang::sym("diagnosis")))   # ensure diagnosis is numeric 0/1
+
+# Confusion matrix using caret (or base table)
+caret::confusionMatrix(factor(df_pred$.pred_class_05), factor(df_pred$.obs),
+                       positive = "1")
+# or base:
+table(Pred = df_pred$.pred_class_05, Obs = df_pred$.obs)
+```
+
+```{r}
+roc_obj <- roc(df_pred$.obs, df_pred$.pred_prob, quiet = TRUE)
+roc_obj
+# AUC
+auc_val <- as.numeric(pROC::auc(roc_obj))
+print(sprintf("AUC = %.3f", auc_val))
+```
+
+Assessing model performance on the test dataset. 
+```{r}
+df_test_pred <- test_df |>
+  mutate(
+    .pred_prob  = predict(mod_all, newdata = test_df, type = "response"),
+    .pred_link  = predict(mod_all, newdata = test_df, type = "link"),
+    .pred_class = as.integer(.pred_prob >= opt_threshold),
+    .obs        = as.integer(!!rlang::sym("diagnosis"))
+  )
+
+caret::confusionMatrix(
+  factor(df_test_pred$.pred_class, levels = c(0,1)),
+  factor(df_test_pred$.obs, levels = c(0,1)),
+  positive = "1"
+)
+
+```
+
+The sensitivity on the test dataset is higher than the sensitivity on the train dataset at the expense of a decrease in specificity. The accuracy is also slightly better for the model's performance on the test dataset. 
+
+```{r}
+roc_obj <- roc(df_test_pred$.obs, df_test_pred$.pred_prob, quiet = TRUE)
+roc_obj
+# AUC
+auc_val <- as.numeric(pROC::auc(roc_obj))
+print(sprintf("AUC = %.3f", auc_val))
+```
+
+### Adding Interactions to the GAM
+These are interactions we thought would be worthwhile to explore:
+1. smoothness_worst x concavity_worst: Low smoothness (coarse boundary) and high concavity is a malignancy marker. There are different risks assocated with smooth but concave compared to rough but concave. 
+2. radius_worst x concave.points_mean: Concave points measure sharp inward curves on the tumor oundary whereas radius measures size. large lesions with many concvave points are strong malignancy signals. Note: use tensor products since the concave.point should not be included due to high VIF. 
+3. fractal_dimension_se x concavity_worst: Fractal dimension relates to edge complexity and high fractal dimension with strong concavity could indicate irregular growth.  
+
+```{r}
+# Building the formula with these interactions
+formula_best <- diagnosis ~ 
+  s(texture_se, bs = "cr", k = 10) +
+  s(compactness_se, bs = "cr", k = 10) +
+  s(fractal_dimension_se, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) + 
+  compactness_mean  + concave.points_mean + radius_se + 
+  smoothness_se + radius_worst + smoothness_worst + concave.points_worst + 
+  symmetry_worst + 
+  ti(concave.points_mean, radius_worst, bs=c("cr", "cr")) + 
+  ti(concavity_worst, smoothness_worst, bs=c("cr", "cr")) +
+  ti(concavity_worst, fractal_dimension_se, bs=c("cr", "cr")) + 
+
+
+# Building the best model
+mod_best <- bam(formula_best,
+               data = train_df,
+               family = binomial(link = "logit"),
+               method = "fREML",
+               discrete = TRUE,      # huge speed boost
+               select = TRUE)
+```
+
+Printing the model summary for this model.
+```{r}
+summary(mod_best)
+```
+
+Comparing this model with the model without interaction terms. We want to choose the model with a statistically significant p-value for the Chi-squared test as well as a drop in AIC. 
+```{r}
+AIC(mod_all, mod_best)
+anova(mod_all, mod_best, test="Chisq")
+```
+
+### Performance on Train Dataset
+```{r}
+df_pred_best <- train_df |>
+  mutate(.pred_prob = predict(mod_best, type = "response"),
+         .pred_link = predict(mod_best, type = "link"),
+         .pred_class_05 = as.integer(.pred_prob >= opt_threshold),
+         .obs = as.integer(!!rlang::sym("diagnosis")))   # ensure diagnosis is numeric 0/1
+
+# Confusion matrix using caret (or base table)
+caret::confusionMatrix(factor(df_pred_best$.pred_class_05), factor(df_pred_best$.obs),
+                       positive = "1")
+# or base:
+table(Pred = df_pred_best$.pred_class_05, Obs = df_pred_best$.obs)
+```
+
+The Confusion Matrix as well as the Specificity and Sensitity are the same when compared to the model from above.
+
+### Performance on Test Data
+More importantly, we want to assess how well the model performs on the test dataset.
+```{r}
+df_test_pred_best <- test_df |>
+  mutate(
+    .pred_prob  = predict(mod_best, newdata = test_df, type = "response"),
+    .pred_link  = predict(mod_best, newdata = test_df, type = "link"),
+    .pred_class = as.integer(.pred_prob >= opt_threshold),
+    .obs        = as.integer(!!rlang::sym("diagnosis"))
+  )
+
+caret::confusionMatrix(
+  factor(df_test_pred_best$.pred_class, levels = c(0,1)),
+  factor(df_test_pred_best$.obs, levels = c(0,1)),
+  positive = "1"
+)
+```
+We also notice that the Confusion matrix is the same as well as the Sensitivity and Specificity compared to the model without the interactions. However, since the interactions make sense in terms of the domain of the problem we are going to keep them in the model since they don't worsen predictive performance.
+
+One reason why we likely don't see any changes in predictive performance is because we are working with relatively small train and test datasets.
+
+### Visualizing Predictive Performance
+```{r}
+roc_obj <- roc(df_test_pred_best$.obs, df_test_pred_best$.pred_prob)
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
+     xlab = "1 - Specificity",
+     legacy.axes=TRUE)
+```
+
+```{r}
+df_test_pred_best$.prob_bin <- cut(df_test_pred_best$.pred_prob, breaks = seq(0,1,0.1))
+calib <- df_test_pred_best %>%
+  group_by(.prob_bin) %>%
+  summarize(
+    mean_pred = mean(.pred_prob),
+    observed = mean(.obs)
+  )
+
+ggplot(calib, aes(x = mean_pred, y = observed)) +
+  geom_line() + geom_point() +
+  geom_abline(linetype = "dashed") +
+  labs(title = "Calibration Plot", x = "Predicted Probability", y = "Observed Frequency")
+
+```
+The calibration above is not great. Points are well calibrated when they close to the diagonal line. If points are below the diagonal, the model is overconfident (overestimates risk). If points fall above the diagonal, the model is underconfident and underestimates risk. 
+
+
+```{r}
+cm <- caret::confusionMatrix(factor(df_test_pred_best$.pred_class),
+                             factor(df_test_pred_best$.obs), positive = "1")
+cm$byClass[c("Sensitivity", "Specificity", "Pos Pred Value", "Neg Pred Value", "F1")]
+
+```
+
+The Brier score below measures mean squared difference between predicted probabilities and actual outcomes.
+```{r}
+brier <- mean((df_test_pred_best$.pred_prob - df_test_pred_best$.obs)^2)
+brier
+
+```
+ 
+A perfect Brier score is 0 so lower Brier scores are preferred. A Brier score from 0-0.05 is considered outstanding calibration. 
