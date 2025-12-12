@@ -249,3 +249,163 @@ mean(rf_pred == test$diagnosis)
 
 ```
 Gives accuracy of ~95%
+
+# Tumor Image
+
+```{r}
+m_tumor <- df %>%
+  filter(diagnosis == "1") %>%
+  slice(1)
+
+m_tumor
+```
+```{r}
+set.seed(123)
+
+# Use features from that single observation
+radius_mean       <- m_tumor$radius_mean        # overall size
+concavity_worst   <- m_tumor$concavity_worst    # bumpiness / irregularity
+
+# number of points on the surface
+n_points <- 4000
+
+# Sample points on a sphere
+phi   <- runif(n_points, 0, pi)        # polar angle
+theta <- runif(n_points, 0, 2 * pi)    # azimuthal angle
+
+# Base radius and bumps
+base_r <- radius_mean
+bump_sd <- concavity_worst * 3         # tweak factor to change roughness
+
+# radius for each point (base + random bumps, keep positive)
+r <- pmax(
+  0.1,
+  rnorm(n_points, mean = base_r, sd = bump_sd)
+)
+
+# Convert spherical to Cartesian coordinates
+x <- r * sin(phi) * cos(theta)
+y <- r * sin(phi) * sin(theta)
+z <- r * cos(phi)
+
+# 3D interactive plot
+plot_ly(
+  tumor_points,
+  x = ~x,
+  y = ~y,
+  z = ~z,
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(
+    size = 2,
+    opacity = 0.7,
+    color = ~radius,       # color by local radius
+    colorscale = "Reds"
+  )
+) %>%
+  layout(
+    title = paste0("Simulated 3D Malignant Tumor"),
+    scene = list(
+      xaxis = list(title = "X (mm)"),
+      yaxis = list(title = "Y (mm)"),
+      zaxis = list(title = "Z (mm)")
+    )
+  )
+```
+
+```{r}
+library(dplyr)
+library(plot3D)
+
+# pick one malignant and one benign case
+malignant_tumor <- df %>%
+  filter(diagnosis == 1) %>%    # 1 = malignant
+  slice(1)
+
+benign_tumor <- df %>%
+  filter(diagnosis == 0) %>%    # 0 = benign
+  slice(1)
+
+malignant_tumor
+benign_tumor
+
+```
+
+```{r}
+simulate_tumor <- function(radius_mean, concavity_worst,
+                           n_points = 4000,
+                           x_offset = 0) {
+  set.seed(123)  # for reproducibility
+
+  # random directions on the sphere
+  phi   <- runif(n_points, 0, pi)
+  theta <- runif(n_points, 0, 2 * pi)
+
+  base_r  <- radius_mean
+  bump_sd <- concavity_worst * 3  # bumpiness
+
+  r <- pmax(0.1, rnorm(n_points, mean = base_r, sd = bump_sd))
+
+  x <- r * sin(phi) * cos(theta) + x_offset
+  y <- r * sin(phi) * sin(theta)
+  z <- r * cos(phi)
+
+  data.frame(x = x, y = y, z = z, radius = r)
+}
+
+```
+
+```{r}
+# features for each tumor
+rm_mal <- malignant_tumor$radius_mean
+cw_mal <- malignant_tumor$concavity_worst
+
+rm_ben <- benign_tumor$radius_mean
+cw_ben <- benign_tumor$concavity_worst
+
+# offsets so they are side-by-side
+offset <- max(rm_mal, rm_ben) * 1.8
+
+tumor_mal <- simulate_tumor(rm_mal, cw_mal, x_offset = -offset)
+tumor_ben <- simulate_tumor(rm_ben, cw_ben, x_offset =  offset)
+
+tumor_mal$type <- "Malignant"
+tumor_ben$type <- "Benign"
+
+tumors <- rbind(tumor_mal, tumor_ben)
+```
+
+```{r}
+# color by type
+cols <- ifelse(tumors$type == "Malignant", "red", "deepskyblue3")
+
+scatter3D(
+  x = tumors$x,
+  y = tumors$y,
+  z = tumors$z,
+  col = cols,
+  colvar = NULL,        # we handle colors manually
+  pch = 16,
+  cex = 0.5,
+  main = "Simulated 3D Tumors: Malignant vs Benign",
+  xlab = "X (mm)",
+  ylab = "Y (mm)",
+  zlab = "Z (mm)",
+  theta = 40,
+  phi   = 20,
+  bty = "g",
+  ticktype = "simple"
+)
+
+legend(
+  "topright",
+  col = c("red", "deepskyblue3"),
+  pch = 16,
+  legend = c("Malignant (diagnosis = 1)", "Benign (diagnosis = 0)"),
+  cex = 0.6,          # smaller text + box
+  pt.cex = 0.6,       # smaller dot size
+  bty = "n"           # optional: remove box border
+)
+
+```
+
