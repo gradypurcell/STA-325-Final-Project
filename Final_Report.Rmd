@@ -6,6 +6,7 @@ editor_options:
   markdown:
     wrap: 72
 output: pdf_document
+geometry: margin=0.5in
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
@@ -172,7 +173,7 @@ No missing data were present, so no imputation or deletion procedures were
 required. The EDA thus served primarily to guide expectations about predictor 
 behavior and to inform our choice of appropriate models.
 
-```{r, results = 'asis', fig.cap="Figure 1: EDA for Interaction Terms", out.width="80%"}
+```{r, results = 'asis', fig.cap="EDA for Interaction Terms", out.width="60%", fig.width=12, fig.height=4}
 library(patchwork)
 df <- read.csv("Data/data.csv")
 
@@ -180,25 +181,34 @@ df <- read.csv("Data/data.csv")
 p1 <- ggplot(df, aes(smoothness_worst, concavity_worst, color = diagnosis)) +
   geom_point() +
   geom_smooth(method = "gam") + 
-  ggtitle("Effect of Smoothness (Worst) and Concavity (Worst) on Diagnosis")
+  ggtitle("Smoothness (Worst) and Concavity (Worst)") + 
+  theme_bw()
 
 # radius_worst vs concave.points_mean
 p2 <- ggplot(df, aes(radius_worst, concave.points_mean, color = diagnosis)) +
   geom_point() +
   geom_smooth(method = "gam") + 
-  ggtitle("Effect of Radius (Worst) and Concave Points (Worst) on Diagnosis")
+  ggtitle("Radius (Worst) and Concave Points (Worst)") + 
+  theme_bw()
 
 # fractal_dimension_se vs concavity_worst
 p3 <- ggplot(df, aes(fractal_dimension_se, concavity_worst, color = diagnosis))+
   geom_point() +
   geom_smooth(method = "gam") + 
-  ggtitle("Effect of Fractal Dimension (SE) and Concavity (Worst) on Diagnosis")
+  ggtitle("Fractal Dimension (SE) and Concavity (Worst)") + 
+  theme_bw()
 
 
 (p1 | p2 | p3) + plot_layout(guides = "collect")
 ```
 
-We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure 1, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors. 
+We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure 1, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors.
+
+## Building a Model of a Mass
+
+For one observation of the data, we have attempted to translate the variables into the model into a 3D representation of a mass. The purpose of this exercise was to gain intuition into how different variables translate into features of the mass.
+
+** ABBY INSERT WORK HERE
 
 ## Cost Analysis and Threshold Selection 
 
@@ -422,7 +432,7 @@ train_df <- as.data.frame(X2[train_idx, ])
 test_df <- as.data.frame(X2[-train_idx, ])
 ```
 
-```{r, eval = TRUE, results = 'asis', fig.cap="Figure 3: Log-Odds Plots", out.width="80%"}
+```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="80%", fig.width=12}
 nbins <- 20
 yvar <- "diagnosis"       # your binary outcome
 
@@ -462,8 +472,7 @@ make_binned_plots <- function(df, xvar, yvar, nbins = 20) {
   p_logit <- ggplot(binned, aes(x = x_mid, y = logit)) +
     geom_point(size = 2) +
     geom_smooth(method = "loess", se = TRUE) +
-    labs(
-      title = paste("Binned log-odds for", xvar),
+    labs(,
       x = xvar,
       y = "Estimated log-odds"
     ) +
@@ -497,14 +506,14 @@ plots <- list(
   p7, p8, p9, p10, p11, p12, p13
 )
 
-wrap_plots(plots, ncol = 4) & 
+wrap_plots(plots, ncol = 3) & 
   theme(legend.position = "bottom")
 
 ```
 
 In Figure 3, we observe that many of the variables to violate nonlinearity. Thus, we also want to quantitatively determine which features should be included as splines by comparing a GLM model to predict malignancy probability with a GAM using only a cubic spline with the selected feature. Then, we compared the change in AIC between the GLM and GAM as well as the p-value for the Chi-Squared test where the cutoff was set at $\alpha = 0.01$. Features which had a drop in AIC with a magnitude of at least 4 and a significant p-value were identified as features with strong evidence of non-linearity. The delta AIC value of 4 was selected using the convention that a drop in AIC greater than 4 is evidence that the GAM meaningfully improves the model fit. 
 
-```{r, eval=TRUE}
+```{r, eval=TRUE, results = 'asis', fig.cap="Features with Strong Nonlinearity", out.width="80%"}
 results <- map_dfr(feature_list, function(var) {
   
   # build formulas
@@ -534,7 +543,6 @@ results <- map_dfr(feature_list, function(var) {
 
   )
 })
-
 results |> 
   filter(abs(delta_AIC) > 4, significant_0.01 == "YES") |>
   select(variable, delta_AIC) |>
@@ -545,7 +553,7 @@ results |>
 From the results above, the following features were included in the GAM as cubic splines: texture_se, compactness_se, fractal_dimension_se, texture_worst, and concavity_worst. 
 
 From here, the initial GAM model was built using cubic splines for 5 nonlinear features and including the other 8 features as main effects. 
-```{r}
+```{r, eval=TRUE, results = 'asis', fig.cap="Figure 5: Confusion Matrix for Model without Interactions", out.width="80%"}
 formula_all <- diagnosis ~ 
   s(texture_se, bs = "cr", k = 10) +
   s(compactness_se, bs = "cr", k = 10) +
@@ -590,42 +598,98 @@ cm_labeled2 <- data.frame(
 )
 kable(cm_labeled2, caption = "Confusion Matrix", align = "c")
 
-
+roc_obj <- roc(df_test_pred$.obs, df_test_pred$.pred_prob, quiet = TRUE)
+auc_val <- as.numeric(pROC::auc(roc_obj))
+#print(auc_val)
 ```
 
-The model performance for this base GAM was assessed using the test dataset. The model has a 98% accuracy as well as a sensitivity of 0.981 and a specificity of 0.983. For cancer diagnoses we want to maximize sensitivity, so we next consider adding interactions to improve our model to further increase sensitivity. 
+The model performance for this base GAM was assessed using the test dataset. The model has a 98% accuracy as well as a sensitivity of 0.981 and a specificity of 0.983. The model also has an area under the curve extremely close to 1 indicating the model has a strong ability to distinguish between classes. For cancer diagnoses we want to maximize sensitivity, so we next consider adding interactions to improve our model to further increase sensitivity. 
 
-## Final Additive GAM Specification
-
-
-
-
-
-
-The resulting additive GAM incorporated nonlinear smooth terms for
-predictors with strong evidence of nonlinearity, along with linear
-effects for remaining LASSO-selected features. Model diagnostics,
-including residual plots, k-index checks, and concurvity analysis,
-indicated adequate fit and no severe violations of modeling assumptions.
-Model performance was evaluated using confusion matrices, ROC curves,
-and AUC. The GAM demonstrated strong discriminatory ability and improved
-calibration relative to the purely linear model, while remaining
-interpretable through smooth effect plots.
-
-## Incorporating Interaction Effects
+## Adding Interaction Effects
 
 Although GAMs capture nonlinear marginal effects, additive models may
 miss important interactions. Guided by domain knowledge and prior
 findings on the Wisconsin Breast Cancer Dataset, we extended the
 additive GAM to include tensor-product interaction terms between
 clinically meaningful feature pairs like tumor size and boundary
-irregularity. Candidate interactions included: concave points × radius,
-concavity × radius, smoothness × concavity, and texture × concavity.
+irregularity. Candidate interactions included: smoothness × concavity,
+radius × concave points, and fractal dimension × concavity.
+
+Justification for these interactions are as follows:
+1. smoothness_worst x concavity_worst: Low smoothness (coarse boundary) and high concavity is a malignancy marker. There are different risks associated with smooth but concave masses compared to rough but concave ones. 
+2. radius_worst x concave.points_mean: Concave points measure sharp inward curves on the tumor boundary whereas radius measures size. Large lesions with many concave points are signals of malignancy.
+3. fractal_dimension_se x concavity_worst: Fractal dimension relates to edge complexity and high fractal dimension with strong concavity could indicate irregular growth.  
 
 These interactions were implemented using tensor-product smooths to
 accommodate differing scales and nonlinear dependence. Model comparison
 using AIC and likelihood ratio tests demonstrated a statistically
-significant improvement in fit over the purely additive GAM.
+significant improvement in fit over the purely additive GAM. We fit several different models with different interaction terms, but the final model was selected for having the largest drop in AIC as well as a significant p-value from the Chi-Squared test. 
+
+```{r, eval=TRUE}
+# Building the formula with these interactions
+formula_best <- diagnosis ~ 
+  s(texture_se, bs = "cr", k = 10) +
+  s(compactness_se, bs = "cr", k = 10) +
+  s(fractal_dimension_se, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) + 
+  compactness_mean  + concave.points_mean + radius_se + 
+  smoothness_se + radius_worst + smoothness_worst + concave.points_worst + 
+  symmetry_worst + 
+  ti(concave.points_mean, radius_worst, bs=c("cr", "cr")) + 
+  ti(concavity_worst, smoothness_worst, bs=c("cr", "cr")) +
+  ti(concavity_worst, fractal_dimension_se, bs=c("cr", "cr")) 
+
+
+# Building the best model
+mod_best <- bam(formula_best,
+               data = train_df,
+               family = binomial(link = "logit"),
+               method = "fREML",
+               discrete = TRUE,      # huge speed boost
+               select = TRUE)
+
+#AIC(mod_all, mod_best)
+#anova(mod_all, mod_best, test="Chisq")
+```
+The final p-value from the Chi-squared test for the model with interactions compared to the model without was 0.002 which is significant past the $\alpha = 0.01$ level. 
+
+We then assessed the model performance of this GAM with interactions on the test dataset.
+```{r, eval=TRUE, results = 'asis', fig.cap="Figure 6: Confusion Matrix for Model with Interactions", out.width="80%"}
+df_test_pred_best <- test_df |>
+  mutate(
+    .pred_prob  = predict(mod_best, newdata = test_df, type = "response"),
+    .pred_link  = predict(mod_best, newdata = test_df, type = "link"),
+    .pred_class = as.integer(.pred_prob >= opt_threshold),
+    .obs        = as.integer(!!rlang::sym("diagnosis"))
+  )
+
+cm2_best <- caret::confusionMatrix(
+  factor(df_test_pred_best$.pred_class, levels = c(0,1)),
+  factor(df_test_pred_best$.obs, levels = c(0,1)),
+  positive = "1"
+)
+
+#cm2_best$overall["Accuracy"]
+#cm2_best$byClass[c("Sensitivity", "Specificity")]
+
+cm2_best <- table(Predicted = df_test_pred_best$.pred_class, 
+             Actual = df_test_pred_best$.obs)
+cm_df2_best <- as.data.frame.matrix(cm2_best)
+cm_labeled2_best <- data.frame(
+  Outcome = c("Predicted Benign", "Predicted Malignant"),
+  Benign  = cm2_best[, "0"],
+  Malignant = cm2_best[, "1"]
+)
+kable(cm_labeled2_best, caption = "Confusion Matrix", align = "c")
+
+roc_obj_best <- roc(df_test_pred_best$.obs, 
+               df_test_pred_best$.pred_prob, quiet = TRUE)
+auc_val_best <- as.numeric(pROC::auc(roc_obj))
+#print(auc_val_best)
+```
+We observe that the Confusion matrix is identical to the GAM without interactions, but this is likely due to the small sample size. Additionally, the accuracy, sensitivity, and specificity remain the same but this can likely also be attributed to the small sample size and the strong performance of the original model without interactions.
 
 ## Final Model Selection
 
@@ -635,7 +699,7 @@ performance (high AUC and balanced sensitivity/specificity), captured
 clinically plausible nonlinear and interaction effects, remained
 interpretable through smooth and interaction visualizations, and aligned
 with the project’s emphasis on transparency and trust in medical
-decision making.
+decision making. The final sensitivity was 0.981 which is very high since 98.1% of malignancy cases were correctly identified in the model, so only 1.9% of cases are false negatives which we want to minimize. 
 
 ## Downstream Uses of the Model
 
@@ -657,13 +721,21 @@ been long recognized as a challenge in mammographic screening.
 
 # **Results**
 
+## Key Findings
+
+Since both our final GAM models have essentially identical predictive results, we have two potential models for clinicians to choose between. If they want a simpler model with fewer features, the GAM without interactions would be a great predictive model to use. On the other hand if they want to prioritize more complex models to explain ways that certain features interact, they should use the GAM with interactions.
+
+Although the LASSO logistic model wasn't selected as our final model for predictions, the features it identified as key features are very helpful for understanding which features of a mass are most indicative of the mass' probability of being malignant. Identifying these features allows clinicians to grasp which aspects of the mass they should focus on when they receive the data by seeing if any of these selected 13 features have values outside of a normal range.
+
 ## Limitations
 
-One limitation is that the data is from 1995. While our work provides proof of concept modeling, future work can expand upon these findings by utilizing modern imaging technology (3D mammography, MRI, MBI) that can can detect additional features. Another limitation is that the predictors are based on computed summary statistics for each tumor (mean, SE, "worst"). Although having these values provide general trends, they may fail to capture specific nuances to tumor characteristics compared to using raw imaging data. An additional limitation to the models selected, lasso logistic regression and GAMs, is that important nonlinear or interaction effects may be overlooked, since regression relies on linear assumption and GAMs may fail to capture complex, higher-order interactions between tumor features. 
+One limitation is that the data is from 1995. While our work provides proof of concept modeling, future work can expand upon these findings by utilizing modern imaging technology (3D mammography, MRI, MBI) that can can detect additional features. Additionally, we are working with a fairly small sample size of observations (569 total). We would expect to see better predictive accuracy and improvement in sensitivity when adding interactions if we had a larger test dataset.  
+
+Another limitation is that the predictors are based on computed summary statistics for each tumor (mean, SE, "worst"). Although having these values provide general trends, they may fail to capture specific nuances to tumor characteristics compared to using raw imaging data. An additional limitation to the models selected, lasso logistic regression and GAMs, is that important nonlinear or interaction effects may be overlooked, since regression relies on linear assumption and GAMs may fail to capture complex, higher-order interactions between tumor features. 
 
 # **Conclusion**
 
 ## Future Analysis
 
-# **Reference**
-Github: https://github.com/gradypurcell/STA-325-Final-Project.git 
+# **References**
+Github: https://github.com/gradypurcell/STA-325-Final-Project.git  
