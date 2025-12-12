@@ -615,6 +615,13 @@ auc_val <- as.numeric(pROC::auc(roc_obj))
 
 The model performance for this base GAM was assessed using the test dataset. The model has a 98% accuracy as well as a sensitivity of 0.981 and a specificity of 0.983. The model also has an area under the curve extremely close to 1 indicating the model has a strong ability to distinguish between classes. For cancer diagnoses we want to maximize sensitivity, so we next consider adding interactions to improve our model to further increase sensitivity. 
 
+```{r, eval=FALSE}
+summary(mod_all)
+```
+
+** ADD INTERPRETATION HERE
+
+
 ## Adding Interaction Effects
 
 Although GAMs capture nonlinear marginal effects, additive models may
@@ -700,6 +707,12 @@ auc_val_best <- as.numeric(pROC::auc(roc_obj))
 #print(auc_val_best)
 ```
 We observe that the Confusion matrix is identical to the GAM without interactions, but this is likely due to the small sample size. Additionally, the accuracy, sensitivity, and specificity remain the same but this can likely also be attributed to the small sample size and the strong performance of the original model without interactions.
+
+```{r, eval = FALSE}
+summary(mod_best)
+```
+
+** ADD INTERPRETATION HERE
 
 ## Final Model Selection
 
