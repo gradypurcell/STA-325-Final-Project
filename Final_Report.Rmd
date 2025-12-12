@@ -246,8 +246,7 @@ the LASSO selected features. We selected a GAM model for interpretability and fl
 
 ## Regularized Logistic Regression and Feature Selection
 
-We first fit a LASSO logistic model to perform variable selection and establish a
-strong, interpretable baseline classifier. The diagnosis variable was
+We first fit a LASSO logistic model to perform variable selection and establish a strong, interpretable baseline classifier. The diagnosis variable was
 encoded as 1 for malignant and 0 for benign. Identifier columns were
 removed, and the remaining predictors were standardized. The data were
 randomly split into training (80%) and testing (20%) sets. A LASSO
@@ -259,7 +258,7 @@ achieved approximately 99% accuracy on the held-out test set, with
 perfect sensitivity and strong specificity. 
 
 ### Setting the Optimal Threshold
-From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From our cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
+Using the From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From our cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
 
 ```{r}
 df <- read.csv("Data/data.csv")
@@ -386,7 +385,7 @@ interpretable predictors, which served two purposes:
 
 ## Nonlinearity Assessment and Motivation for GAMs
 
-While logistic regression provides interpretability through
+While LASSO logistic regression provides interpretability through
 coefficients, it assumes linear relationships between predictors and the
 log-odds of malignancy. To assess whether this assumption was
 appropriate, we conducted a systematic investigation of potential
@@ -395,8 +394,8 @@ nonlinearity.
 For each predictor selected by the LASSO model, we binned the predictor
 into quantiles, computed observed malignancy proportions within each
 bin, and examined both probability-scale and log-odds-scale plots.
-Several predictors, most notably smoothness_se, texture_worst,
-concavity_worst, and radius_worst, exhibited clear nonlinear patterns,
+Several predictors, most notably texture_se, compactness_se,
+fractal_dimension_se, texture_worst and concavity_worst, exhibited clear nonlinear patterns,
 suggesting that a purely linear model may be misspecified.
 
 ## Generalized Additive Models (GAMs)
@@ -407,11 +406,23 @@ binomial logit link. GAMs model the log-odds of malignancy as a sum of
 smooth functions of predictors, allowing nonlinear relationships to be
 captured without requiring explicit interaction terms.
 
-We compared different spline bases (thin-plate regression splines and
-cubic regression splines) for individual predictors using AIC, REML
-scores, and visual inspection. Cubic regression splines consistently
+We compared different spline bases (thin-plate regression splines,
+cubic regression splines, and thin-plate shrinkage splines) for individual predictors using AIC, REML
+scores, and visual inspection. Restricted Maximum Likelihood (REML) was used to compare the splines instead of Maximum Likelihood because REML provides less biased estimates for variance components. Although no spline performed definitively better across all metrics, cubic splines generally had lower AIC and REML across variables. Additionally, cubic splines had a lower range of plausible predicted probabilities and less wiggly than the other two splines. Thus, we chose to use cubic regression splines since consistently
 provided better stability and more realistic probability behavior, and
 were therefore selected.
+
+After determining the appropriate spline to be cubic splines, we set 
+
+```{r}
+# Getting the training dataframe
+X2 <- model.matrix( ~ ., data = df)[, -1]
+
+# Getting the dataframes
+train_df <- as.data.frame(X2[train_idx, ])
+```
+
+
 
 Formal model comparisons between generalized linear models and GAMs
 using AIC differences and likelihood ratio tests, confirmed strong
