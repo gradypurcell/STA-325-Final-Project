@@ -202,18 +202,19 @@ We also explored bivariate EDA to examine potential interaction effects between 
 
 ## Cost Analysis and Threshold Selection 
 
-We then researched the cost of false positives and negatives to compute
+We researched the cost of false positives and negatives to compute
 a cost based loss function to determine the optimal classification
 threshold. This threshold will reflect the asymmetric cost of false
 negatives (missing a malignant tumor) versus false positives
 (unnecessary further testing), and will guide our final decision rule
 applied to our model. 
 
+** LAURA INCLUDE THRESHOLD FOR PROBABILITY
+** LAURA REWRITE WHATEVER NEEDS CHANGING BELOW
+
 As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
 
 Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
-
-** LAURA INCLUDE THRESHOLD FOR PROBABILITY
 
 ## Preliminary Model Fitting
 
@@ -228,8 +229,7 @@ used where appropriate to reduce sampling variability.
 
 Although the random forest achieved strong predictive accuracy, it
 lacked interpretability which should be prioritized since this model will be used by doctors to diagnose whether a breast cancer mass is benign or malignant at an early stage. 
-KNN performed reasonably but does not provide coefficients, feature weights, or insight into mechanism.
-Standard logistic regression was interpretable but tended to overfit
+KNN performed reasonably but does not provide coefficients, feature weights, or insight into mechanism. Standard logistic regression was interpretable but tended to overfit
 without regularization due to the high number of correlated predictors.
 
 ## Model Selection and Rationale
@@ -242,16 +242,7 @@ providing a concise, clinically meaningful set of predictors and
 potential interactions.
 
 After selecting these top predictors, we further fit a GAM informed by
-the LASSO selected features. We selected a GAM model for interpretability and flexibility in including nonlinear terms. GAM models are more interpretable than many other 
-
-
-Decision trees offer high interpretability,
-producing decision rules that patients and clinicians can easily
-understand. This structure directly supports the project’s
-interpretability goals and meets the rubric requirement for
-communicating results to individuals outside the field.
-
-* get rid of decision tree stuff here?
+the LASSO selected features. We selected a GAM model for interpretability and flexibility in including nonlinear terms. GAM models are more interpretable than many other regression techniques since they enable visualization between features and the predicted malignancy probability with interpretability being essential for clinical decisions. Additionally, the nonlinearlity of GAMs is advantageous as tumor characteristics rarely relate to malignancy in linear ways, so GAMs can model predictors using a smooth function like splines to learn curves without assuming linearity which improves predictive performance. 
 
 ## Regularized Logistic Regression and Feature Selection
 
