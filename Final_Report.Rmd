@@ -761,3 +761,5 @@ CDC: https://www.cdc.gov/united-states-cancer-statistics/publications/breast-can
 American Cancer Society: https://www.cancer.org/content/dam/cancer-org/research/cancer-facts-and-statistics/breast-cancer-facts-and-figures/2022-2024-breast-cancer-fact-figures-acs.pdf
 WebMD: https://www.webmd.com/breast-cancer/breast-cancer-costs
 UTMB: https://www.utmb.edu/news/article/health-blog/2025/10/20/beyond-the-diagnosis--facing-the-emotional-side-of-breast-cancer
+AJMC: https://www.ajmc.com/view/screening-for-cancer-the-economic-medical-and-psychosocial-issues  
+Medscape: https://emedicine.medscape.com/article/1945498-overview?form=fpf
