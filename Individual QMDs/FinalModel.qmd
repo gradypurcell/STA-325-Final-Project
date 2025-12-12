@@ -484,4 +484,125 @@ auc_val <- as.numeric(pROC::auc(roc_obj))
 print(sprintf("AUC = %.3f", auc_val))
 ```
 
+### Adding Interactions to the GAM
+These are interactions we thought would be worthwhile to explore:
+1. smoothness_worst x concavity_worst: Low smoothness (coarse boundary) and high concavity is a malignancy marker. There are different risks assocated with smooth but concave compared to rough but concave. 
+2. radius_worst x concave.points_mean: Concave points measure sharp inward curves on the tumor oundary whereas radius measures size. large lesions with many concvave points are strong malignancy signals. Note: use tensor products since the concave.point should not be included due to high VIF. 
+3. fractal_dimension_se x concavity_worst: Fractal dimension relates to edge complexity and high fractal dimension with strong concavity could indicate irregular growth.  
 
+```{r}
+# Building the formula with these interactions
+formula_best <- diagnosis ~ 
+  s(texture_se, bs = "cr", k = 10) +
+  s(compactness_se, bs = "cr", k = 10) +
+  s(fractal_dimension_se, bs = "cr", k = 10) +
+  concave.points_mean + radius_se + radius_worst +
+  s(texture_worst, bs = "cr", k = 10) +
+  s(concavity_worst, bs = "cr", k = 10) + 
+  compactness_mean  + concave.points_mean + radius_se + 
+  smoothness_se + radius_worst + smoothness_worst + concave.points_worst + 
+  symmetry_worst + 
+  ti(concave.points_mean, radius_worst, bs=c("cr", "cr")) + 
+  ti(concavity_worst, smoothness_worst, bs=c("cr", "cr")) +
+  ti(concavity_worst, fractal_dimension_se, bs=c("cr", "cr")) + 
+
+
+# Building the best model
+mod_best <- bam(formula_best,
+               data = train_df,
+               family = binomial(link = "logit"),
+               method = "fREML",
+               discrete = TRUE,      # huge speed boost
+               select = TRUE)
+```
+
+Printing the model summary for this model.
+```{r}
+summary(mod_best)
+```
+
+Comparing this model with the model without interaction terms. We want to choose the model with a statistically significant p-value for the Chi-squared test as well as a drop in AIC. 
+```{r}
+AIC(mod_all, mod_best)
+anova(mod_all, mod_best, test="Chisq")
+```
+
+### Performance on Train Dataset
+```{r}
+df_pred_best <- train_df |>
+  mutate(.pred_prob = predict(mod_best, type = "response"),
+         .pred_link = predict(mod_best, type = "link"),
+         .pred_class_05 = as.integer(.pred_prob >= opt_threshold),
+         .obs = as.integer(!!rlang::sym("diagnosis")))   # ensure diagnosis is numeric 0/1
+
+# Confusion matrix using caret (or base table)
+caret::confusionMatrix(factor(df_pred_best$.pred_class_05), factor(df_pred_best$.obs),
+                       positive = "1")
+# or base:
+table(Pred = df_pred_best$.pred_class_05, Obs = df_pred_best$.obs)
+```
+
+The Confusion Matrix as well as the Specificity and Sensitity are the same when compared to the model from above.
+
+### Performance on Test Data
+More importantly, we want to assess how well the model performs on the test dataset.
+```{r}
+df_test_pred_best <- test_df |>
+  mutate(
+    .pred_prob  = predict(mod_best, newdata = test_df, type = "response"),
+    .pred_link  = predict(mod_best, newdata = test_df, type = "link"),
+    .pred_class = as.integer(.pred_prob >= opt_threshold),
+    .obs        = as.integer(!!rlang::sym("diagnosis"))
+  )
+
+caret::confusionMatrix(
+  factor(df_test_pred_best$.pred_class, levels = c(0,1)),
+  factor(df_test_pred_best$.obs, levels = c(0,1)),
+  positive = "1"
+)
+```
+We also notice that the Confusion matrix is the same as well as the Sensitivity and Specificity compared to the model without the interactions. However, since the interactions make sense in terms of the domain of the problem we are going to keep them in the model since they don't worsen predictive performance.
+
+One reason why we likely don't see any changes in predictive performance is because we are working with relatively small train and test datasets.
+
+### Visualizing Predictive Performance
+```{r}
+roc_obj <- roc(df_test_pred_best$.obs, df_test_pred_best$.pred_prob)
+plot(roc_obj, main = paste("AUC =", round(auc_val, 3)),
+     xlab = "1 - Specificity",
+     legacy.axes=TRUE)
+```
+
+```{r}
+df_test_pred_best$.prob_bin <- cut(df_test_pred_best$.pred_prob, breaks = seq(0,1,0.1))
+calib <- df_test_pred_best %>%
+  group_by(.prob_bin) %>%
+  summarize(
+    mean_pred = mean(.pred_prob),
+    observed = mean(.obs)
+  )
+
+ggplot(calib, aes(x = mean_pred, y = observed)) +
+  geom_line() + geom_point() +
+  geom_abline(linetype = "dashed") +
+  labs(title = "Calibration Plot", x = "Predicted Probability", y = "Observed Frequency")
+
+```
+The calibration above is not great. Points are well calibrated when they close to the diagonal line. If points are below the diagonal, the model is overconfident (overestimates risk). If points fall above the diagonal, the model is underconfident and underestimates risk. 
+
+
+```{r}
+cm <- caret::confusionMatrix(factor(df_test_pred_best$.pred_class),
+                             factor(df_test_pred_best$.obs), positive = "1")
+cm$byClass[c("Sensitivity", "Specificity", "Pos Pred Value", "Neg Pred Value", "F1")]
+
+```
+
+The Brier score below measures mean squared difference between predicted probabilities and actual outcomes.
+```{r}
+brier <- mean((df_test_pred_best$.pred_prob - df_test_pred_best$.obs)^2)
+brier
+
+```
+ 
+A perfect Brier score is 0 so lower Brier scores are preferred. A Brier score from 0-0.05 is considered outstanding calibration. 
