@@ -172,7 +172,7 @@ No missing data were present, so no imputation or deletion procedures were
 required. The EDA thus served primarily to guide expectations about predictor 
 behavior and to inform our choice of appropriate models.
 
-```{r}
+```{r, results = 'asis', fig.cap="Figure 1: EDA for Interaction Terms", out.width="80%"}
 library(patchwork)
 df <- read.csv("Data/data.csv")
 
@@ -198,7 +198,7 @@ p3 <- ggplot(df, aes(fractal_dimension_se, concavity_worst, color = diagnosis))+
 (p1 | p2 | p3) + plot_layout(guides = "collect")
 ```
 
-We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure ___, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors. 
+We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure 1, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors. 
 
 ## Cost Analysis and Threshold Selection 
 
@@ -311,7 +311,7 @@ opt_threshold <- coords$threshold
 pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
 ```
 
-```{r, eval=TRUE, results = 'asis', fig.cap="Figure 1: Confusion Matrix", out.width="80%"}
+```{r, eval=TRUE, results = 'asis', fig.cap="Figure 2: Confusion Matrix", out.width="80%"}
 # Building the Confusion Matrix
 cm <- table(Predicted = pred_class, Actual = y_test)
 cm_df <- as.data.frame.matrix(cm)
@@ -412,7 +412,90 @@ scores, and visual inspection. Restricted Maximum Likelihood (REML) was used to 
 provided better stability and more realistic probability behavior, and
 were therefore selected.
 
-After determining the appropriate spline to be cubic splines, we set 
+After determining the appropriate spline to be cubic splines, we selected which features show strong violation of nonlinearity so we can include them in splines. All other variables which don't show strong evidence of nonlinearity will be included as main effects or interaction terms. To do this, we first binned each of the predictors and calculated the appropriate log-odds of malignancy within the training data. We then visualized the logit plot for each predictor to determine where we could see strong violations of nonlinearity. 
+
+```{r, eval = TRUE, results = 'asis', fig.cap="Figure 3: Log-Odds Plots", out.width="80%"}
+nbins <- 20
+yvar <- "diagnosis"       # your binary outcome
+
+# Function that bins & plots one variable
+make_binned_plots <- function(df, xvar, yvar, nbins = 20) {
+  
+  # 1) Compute bins
+  binned <- df %>%
+    mutate(bin = ntile(.data[[xvar]], nbins)) %>%
+    group_by(bin) %>%
+    summarise(
+      x_mid = mean(.data[[xvar]], na.rm = TRUE),
+      n     = n(),
+      prop  = mean(.data[[yvar]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      se    = sqrt(prop * (1 - prop) / pmax(n, 1)),
+      lower = pmax(0, prop - 1.96 * se),
+      upper = pmin(1, prop + 1.96 * se),
+      eps   = 1e-3,
+      logit = log((prop + eps) / (1 - prop + eps))
+    )
+  
+  # 2) Proportion plot
+  p_prop <- ggplot(binned, aes(x = x_mid, y = prop)) +
+    geom_point(size = 2) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.01) +
+    labs(
+      title = paste("Binned proportion for", xvar),
+      x = xvar,
+      y = "Observed proportion"
+    ) +
+    theme_minimal()
+  
+  # 3) Logit plot
+  p_logit <- ggplot(binned, aes(x = x_mid, y = logit)) +
+    geom_point(size = 2) +
+    geom_smooth(method = "loess", se = TRUE) +
+    labs(
+      title = paste("Binned log-odds for", xvar),
+      x = xvar,
+      y = "Estimated log-odds"
+    ) +
+    theme_minimal()
+  
+  return(list(binned = binned, prop_plot = p_prop, logit_plot = p_logit))
+}
+
+# ---- Loop over all predictors ----
+results <- map(feature_list, ~ make_binned_plots(train_df, .x, yvar))
+names(results) <- feature_list
+
+## Showing all of the plots
+p1 <- results[["smoothness_se"]]$logit_plot
+p2 <- results[["concave.points_mean"]]$logit_plot
+p3 <- results[["radius_se"]]$logit_plot
+p4 <- results[["radius_worst"]]$logit_plot
+p5 <- results[["texture_worst"]]$logit_plot
+p6 <- results[["smoothness_worst"]]$logit_plot
+p7 <- results[["concavity_worst"]]$logit_plot
+p8 <- results[["concave.points_worst"]]$logit_plot
+p9 <- results[["symmetry_worst"]]$logit_plot
+p10 <- results[["compactness_mean"]]$logit_plot
+p11 <- results[["texture_se"]]$logit_plot
+p12 <- results[["compactness_se"]]$logit_plot
+p13 <- results[["fractal_dimension_se"]]$logit_plot
+
+# Arranging the plots
+plots <- list(
+  p1, p2, p3, p4, p5, p6,
+  p7, p8, p9, p10, p11, p12, p13
+)
+
+wrap_plots(plots, ncol = 4) & 
+  theme(legend.position = "bottom")
+
+```
+
+
+
 
 ```{r}
 # Getting the training dataframe
@@ -494,3 +577,6 @@ One limitation is that the data is from 1995. While our work provides proof of c
 # **Conclusion**
 
 ## Future Analysis
+
+# **Reference**
+Github: https://github.com/gradypurcell/STA-325-Final-Project.git 
