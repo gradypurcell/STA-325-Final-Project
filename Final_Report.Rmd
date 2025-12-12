@@ -563,17 +563,44 @@ mod_all <- bam(formula_all,
                method = "fREML",
                discrete = TRUE,      # huge speed boost
                select = TRUE)
+
+df_test_pred <- test_df |>
+  mutate(
+    .pred_prob  = predict(mod_all, newdata = test_df, type = "response"),
+    .pred_link  = predict(mod_all, newdata = test_df, type = "link"),
+    .pred_class = as.integer(.pred_prob >= opt_threshold),
+    .obs        = as.integer(!!rlang::sym("diagnosis"))
+  )
+
+cm <- caret::confusionMatrix(
+  factor(df_test_pred$.pred_class, levels = c(0,1)),
+  factor(df_test_pred$.obs, levels = c(0,1)),
+  positive = "1"
+)
+
+#cm$overall["Accuracy"]
+#cm$byClass[c("Sensitivity", "Specificity")]
+
+cm2 <- table(Predicted = df_test_pred$.pred_class, Actual = df_test_pred$.obs)
+cm_df2 <- as.data.frame.matrix(cm2)
+cm_labeled2 <- data.frame(
+  Outcome = c("Predicted Benign", "Predicted Malignant"),
+  Benign  = cm2[, "0"],
+  Malignant = cm2[, "1"]
+)
+kable(cm_labeled2, caption = "Confusion Matrix", align = "c")
+
+
 ```
 
-
-
-Formal model comparisons between generalized linear models and GAMs
-using AIC differences and likelihood ratio tests, confirmed strong
-evidence of nonlinearity for several predictors. Based on these results,
-smooth terms were retained for smoothness_se, texture_worst, and
-concavity_worst. Other predictors entered the model linearly.
+The model performance for this base GAM was assessed using the test dataset. The model has a 98% accuracy as well as a sensitivity of 0.981 and a specificity of 0.983. For cancer diagnoses we want to maximize sensitivity, so we next consider adding interactions to improve our model to further increase sensitivity. 
 
 ## Final Additive GAM Specification
+
+
+
+
+
 
 The resulting additive GAM incorporated nonlinear smooth terms for
 predictors with strong evidence of nonlinearity, along with linear
