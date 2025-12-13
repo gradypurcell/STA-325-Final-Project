@@ -5,7 +5,12 @@ date: "`r Sys.Date()`"
 editor_options:
   markdown:
     wrap: 72
-output: pdf_document
+format:
+  pdf:
+    cite-method: biblatex
+    link-citations: true
+bibliography: references.bib
+link-citations: true
 geometry: margin=0.5in
 ---
 ```{r setup, include=FALSE}
@@ -17,11 +22,10 @@ knitr::opts_chunk$set(
 )
 
 ```
-
-
 # **Introduction**
 
 ## Project Goals
+[@cdc_stats]
 
 The primary goal of our project is to build an interpretable machine
 learning model that can assess whether a breast mass is benign or
@@ -134,6 +138,8 @@ clear biological meaning and can be reasoned about in clinical terms
 
 The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texure, smoothness, concavity, concave points and symmetry.
 
+** DESCRIBE THE 13 PREDICTORS WE GOT
+
 # **Modeling Methodology**
 
 Our methodology consists of five main stages: exploratory data
@@ -173,7 +179,9 @@ No missing data were present, so no imputation or deletion procedures were
 required. The EDA thus served primarily to guide expectations about predictor 
 behavior and to inform our choice of appropriate models.
 
-```{r, results = 'asis', fig.cap="EDA for Interaction Terms", out.width="60%", fig.width=12, fig.height=4}
+@fig-eda-interactions
+
+```{r, results = 'asis', fig.cap="EDA for Interaction Terms", out.width="100%", fig.width=12, fig.height=4, label="fig-eda-interactions"}
 library(patchwork)
 df <- read.csv("Data/data.csv")
 
@@ -181,21 +189,21 @@ df <- read.csv("Data/data.csv")
 p1 <- ggplot(df, aes(smoothness_worst, concavity_worst, color = diagnosis)) +
   geom_point() +
   geom_smooth(method = "gam") + 
-  ggtitle("Smoothness (Worst) and Concavity (Worst)") + 
+  ggtitle("Smoothness (Worst) \nand Concavity (Worst)") + 
   theme_bw()
 
 # radius_worst vs concave.points_mean
 p2 <- ggplot(df, aes(radius_worst, concave.points_mean, color = diagnosis)) +
   geom_point() +
   geom_smooth(method = "gam") + 
-  ggtitle("Radius (Worst) and Concave Points (Worst)") + 
+  ggtitle("Radius (Worst) \nand Concave Points (Worst)") + 
   theme_bw()
 
 # fractal_dimension_se vs concavity_worst
 p3 <- ggplot(df, aes(fractal_dimension_se, concavity_worst, color = diagnosis))+
   geom_point() +
   geom_smooth(method = "gam") + 
-  ggtitle("Fractal Dimension (SE) and Concavity (Worst)") + 
+  ggtitle("Fractal Dimension (SE) \nand Concavity (Worst)") + 
   theme_bw()
 
 
@@ -326,7 +334,7 @@ opt_threshold <- coords$threshold
 pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
 ```
 
-```{r, eval=TRUE, results = 'asis', fig.cap="Figure 2: Confusion Matrix", out.width="80%"}
+```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix", out.width="80%", label = "tbl-conf-mat"}
 # Building the Confusion Matrix
 cm <- table(Predicted = pred_class, Actual = y_test)
 cm_df <- as.data.frame.matrix(cm)
@@ -444,7 +452,7 @@ train_df <- as.data.frame(X2[train_idx, ])
 test_df <- as.data.frame(X2[-train_idx, ])
 ```
 
-```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="80%", fig.width=12}
+```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="80%", fig.width=12, label = "fig-log-odds"}
 nbins <- 20
 yvar <- "diagnosis"       # your binary outcome
 
@@ -525,7 +533,7 @@ wrap_plots(plots, ncol = 3) &
 
 In Figure 3, we observe that many of the variables to violate nonlinearity. Thus, we also want to quantitatively determine which features should be included as splines by comparing a GLM model to predict malignancy probability with a GAM using only a cubic spline with the selected feature. Then, we compared the change in AIC between the GLM and GAM as well as the p-value for the Chi-Squared test where the cutoff was set at $\alpha = 0.01$. Features which had a drop in AIC with a magnitude of at least 4 and a significant p-value were identified as features with strong evidence of non-linearity. The delta AIC value of 4 was selected using the convention that a drop in AIC greater than 4 is evidence that the GAM meaningfully improves the model fit. 
 
-```{r, eval=TRUE, results = 'asis', fig.cap="Features with Strong Nonlinearity", out.width="80%"}
+```{r, eval=TRUE, results = 'asis', tbl.cap="Features with Strong Nonlinearity", out.width="80%", label = "tbl-nonlin-feat"}
 results <- map_dfr(feature_list, function(var) {
   
   # build formulas
@@ -565,7 +573,7 @@ results |>
 From the results above, the following features were included in the GAM as cubic splines: texture_se, compactness_se, fractal_dimension_se, texture_worst, and concavity_worst. 
 
 From here, the initial GAM model was built using cubic splines for 5 nonlinear features and including the other 8 features as main effects. 
-```{r, eval=TRUE, results = 'asis', fig.cap="Figure 5: Confusion Matrix for Model without Interactions", out.width="80%"}
+```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix for Model without Interactions", out.width="80%", label = "tbl-conf-mat-no-inter"}
 formula_all <- diagnosis ~ 
   s(texture_se, bs = "cr", k = 10) +
   s(compactness_se, bs = "cr", k = 10) +
@@ -669,13 +677,13 @@ mod_best <- bam(formula_best,
                discrete = TRUE,      # huge speed boost
                select = TRUE)
 
-#AIC(mod_all, mod_best)
-#anova(mod_all, mod_best, test="Chisq")
+AIC(mod_all, mod_best)
+anova(mod_all, mod_best, test="Chisq")
 ```
 The final p-value from the Chi-squared test for the model with interactions compared to the model without was 0.002 which is significant past the $\alpha = 0.01$ level. 
 
 We then assessed the model performance of this GAM with interactions on the test dataset.
-```{r, eval=TRUE, results = 'asis', fig.cap="Figure 6: Confusion Matrix for Model with Interactions", out.width="80%"}
+```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix for Model with Interactions", out.width="80%", label="tbl-conf-max-inter"}
 df_test_pred_best <- test_df |>
   mutate(
     .pred_prob  = predict(mod_best, newdata = test_df, type = "response"),
@@ -767,14 +775,3 @@ Further analysis in the cancer field is pivotal as healthcare advancements are v
 Another suggestion for future work would be to include age, race/ethnicity and socioeconomic class in the data. Not only would this allow us to see how we can ensure proper representation, but also, according to the American Cancer Society, these three factors actually play a role in what stage of cancer (and thus the probability the tumor is malignant or begin) the diagnosis is received. 
 
 Our findings have crafted the framework for future researchers to continuously test our model with recent data, and we encourage others to expand on our results with suggestions above or beyond.
-
-# **References**
-Github: https://github.com/gradypurcell/STA-325-Final-Project.git  
-
-# ** Sources**
-CDC: https://www.cdc.gov/united-states-cancer-statistics/publications/breast-cancer-stat-bite.html
-American Cancer Society: https://www.cancer.org/content/dam/cancer-org/research/cancer-facts-and-statistics/breast-cancer-facts-and-figures/2022-2024-breast-cancer-fact-figures-acs.pdf
-WebMD: https://www.webmd.com/breast-cancer/breast-cancer-costs
-UTMB: https://www.utmb.edu/news/article/health-blog/2025/10/20/beyond-the-diagnosis--facing-the-emotional-side-of-breast-cancer
-AJMC: https://www.ajmc.com/view/screening-for-cancer-the-economic-medical-and-psychosocial-issues  
-Medscape: https://emedicine.medscape.com/article/1945498-overview?form=fpf
