@@ -138,7 +138,26 @@ clear biological meaning and can be reasoned about in clinical terms
 
 The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texure, smoothness, concavity, concave points and symmetry.
 
-** DESCRIBE THE 13 PREDICTORS WE GOT
+```{r}
+variables <- data.frame(
+Variable = c(
+"Radius", "Texture", "Smoothness", "Fractal dimension",
+"Symmetry", "Compactness", "Concave points", "Concavity"
+),
+Description = c(
+"Mean of distances from center to points on perimeter",
+"Standard deviation of gray-scale values",
+"Local variation in radius lengths",
+"“coastline approximation” − 1",
+"Symmetry of cell nuclei",
+"perimeter² / area − 1.0",
+"Number of concave portions on contour",
+"Severity of concave portions of the contour"
+)
+)
+
+kable(variables, caption = "Key Feature Variable Descriptions", align = "c") 
+```
 
 # **Modeling Methodology**
 
