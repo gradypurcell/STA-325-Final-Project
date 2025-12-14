@@ -13,6 +13,7 @@ bibliography: references.bib
 link-citations: true
 geometry: margin=0.5in
 ---
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = FALSE,        # hide code by default
@@ -22,10 +23,10 @@ knitr::opts_chunk$set(
 )
 
 ```
+
 # **Introduction**
 
 ## Project Goals
-[@cdc_stats]
 
 The primary goal of our project is to build an interpretable machine
 learning model that can assess whether a breast mass is benign or
@@ -48,18 +49,19 @@ central concerns in medical applications, and our modeling pipeline is
 intentionally designed to balance performance with transparency,
 ensuring that the results are clinically meaningful and accessible.
 
+Our code is available at https://github.com/gradypurcell/STA-325-Final-Project/tree/main[@github].
+
 ## Importance and Relevance
 
 Breast cancer is one of the most pressing health challenges worldwide
 and remains the second most common cancer among women, accounting for
 roughly 30% of all new female cancer cases each year, and the second
-leading cause of cancer related deaths among women (American Cancer
-Society, 2024). As incidence rates continue to rise by approximately 1%
+leading cause of cancer related deaths among women [@acs_facts]. As incidence rates continue to rise by approximately 1%
 annually, improving tools for early differentiation between benign and
 malignant tumors is critical for timely intervention. Early detection of
 breast cancer has been shown to boost survival rates by up to 20%,
 further underscoring the clinical relevance of high quality diagnostic
-support tools (ClinicalKey, 2025).
+support tools [@pubmed].
 
 Traditional diagnostic techniques like mammography, ultrasound, MRI, and
 biopsy are essential but can also be expensive, time consuming, and
@@ -67,10 +69,9 @@ prone to human error, particularly false positives and false negatives.
 Recent research demonstrates that machine learning (ML) can meaningfully
 strengthen diagnostic processes. For instance, ML models have shown
 higher accuracy than clinicians in predicting several cancers, including
-breast, brain, and lung cancer (PMC10312208). A 2020 DeepMind based
-system outperformed human specialists in breast cancer detection
-(Nature, 2020), and other ML systems have reached 97% accuracy in
-identifying common types of lung cancer (PMC10312208). These findings
+breast, brain, and lung cancer [@pmc]. A 2020 DeepMind based
+system outperformed human specialists in breast cancer detection, and other ML systems have reached 97% accuracy in
+identifying common types of lung cancer [@pmc;@nature]. These findings
 highlight the potential for ML driven tools to enhance clinical
 workflows and reduce diagnostic uncertainty.
 
@@ -79,7 +80,7 @@ prior research has achieved strong performance: Support Vector Machines
 have reached 87–89% accuracy in distinguishing malignant from benign
 masses, and deep learning models such as CNNs have successfully
 extracted subtle features (e.g., microcalcifications or architectural
-distortions) that radiologists may overlook (ClinicalKey, 2025).
+distortions) that radiologists may overlook [@pubmed].
 
 Although the dataset we analyze is more than two decades old, our
 project serves as a proof of concept illustrating how interpretable ML
@@ -99,7 +100,7 @@ Since we are building our model to assist doctors with diagnosing cancer patient
 
 The dataset used in this analysis comes from the Diagnostic Wisconsin
 Breast Cancer Database (WBCD), originally created from digitized images
-of fine needle aspiration (FNA) biopsies taken from breast masses. The
+of fine needle aspiration (FNA) biopsies taken from breast masses[@data]. The
 version used here was downloaded from Kaggle, but the source dataset was
 donated on October 31, 1995. Although imaging modalities have improved
 significantly since 1995, modern systems continue to quantify similar
@@ -136,28 +137,27 @@ analysis (EDA) and model interpretation because each predictor has a
 clear biological meaning and can be reasoned about in clinical terms
 (e.g., radius relates to tumor size, concavity relates to irregularity).
 
-The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texure, smoothness, concavity, concave points and symmetry.
+The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texture, smoothness, concavity, concave points and symmetry. @tbl-key-vars describes some of the key variables we used. 
 
-```{r}
+```{r, label = "tbl-key-vars"}
 library(knitr)
 
 variables <- data.frame(
-Variable = c(
-"Radius", "Texture", "Smoothness", "Fractal dimension",
-"Symmetry", "Compactness", "Concave points", "Concavity"
-),
-Description = c(
-"Mean of distances from center to points on perimeter",
-"Standard deviation of gray-scale values",
-"Local variation in radius lengths",
-"“coastline approximation” − 1",
-"Symmetry of cell nuclei",
-"perimeter² / area − 1.0",
-"Number of concave portions on contour",
-"Severity of concave portions of the contour"
+  Variable = c(
+  "Radius", "Texture", "Smoothness", "Fractal dimension",
+  "Symmetry", "Compactness", "Concave points", "Concavity"
+  ),
+  Description = c(
+  "Mean of distances from center to points on perimeter",
+  "Standard deviation of gray-scale values",
+  "Local variation in radius lengths",
+  "“coastline approximation” − 1",
+  "Symmetry of cell nuclei",
+  "perimeter² / area − 1.0",
+  "Number of concave portions on contour",
+  "Severity of concave portions of the contour"
+  )
 )
-)
-
 kable(variables, caption = "Key Feature Variable Descriptions", align = "c") 
 ```
 
@@ -200,7 +200,7 @@ No missing data were present, so no imputation or deletion procedures were
 required. The EDA thus served primarily to guide expectations about predictor 
 behavior and to inform our choice of appropriate models.
 
-@fig-eda-interactions
+
 
 ```{r, results = 'asis', fig.cap="EDA for Interaction Terms", out.width="100%", fig.width=12, fig.height=4, label="fig-eda-interactions"}
 library(patchwork)
@@ -231,13 +231,13 @@ p3 <- ggplot(df, aes(fractal_dimension_se, concavity_worst, color = diagnosis))+
 (p1 | p2 | p3) + plot_layout(guides = "collect")
 ```
 
-We also explored bivariate EDA to examine potential interaction effects between predictors. In Figure 1, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors.
+We also explored bivariate EDA to examine potential interaction effects between predictors. In @fig-eda-interactions, there appears to be interaction effects between each of the listed pairs of predictors since the relationships between each pair differs with the benign and malignant tumors.
 
 ## Building a Model of a Mass
 
 For two observations of a malignant and a benign tumor, we have attempted to translate the variables of the model into a representation of a mass. The purpose of this exercise was to gain intuition into the features of the mass and explore the differences between malignant and benign tumors. 
 
-```{r, fig.width=4, fig.height=3}
+```{r, label = "fig-mass", fig.width=4, fig.height=3, fig.cap = "Simulated Tumor Cross-Section: Benign vs Malignant"}
 library(dplyr)
 library(ggplot2)
 
@@ -290,17 +290,16 @@ ggplot(tumors, aes(x = x, y = y)) +
   facet_wrap(~type, nrow = 1) +
   coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
   labs(
-    title = "Figure 2. Simulated Tumor Cross-Section: Benign vs Malignant",
     x = "X (mm)", y = "Y (mm)", color = NULL
   ) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "none", plot.title = element_text(size = 10))
 ```
-From this visualization of the tumor cross sections, we can see that the selected malignant tumor appears to be larger and more irregular and dispersed around the edges compared to the selected benign tumor. Thus, the observed malignant tumor has a larger average radius and higher concavity measures than the benign tumor. 
+From @fig-mass of the tumor cross sections, we can see that the selected malignant tumor appears to be larger and more irregular and dispersed around the edges compared to the selected benign tumor. Thus, the observed malignant tumor has a larger average radius and higher concavity measures than the benign tumor. 
 
-Based on initial observations, the summary statistics show a consistent pattern, indicating that malignant tumors (diagnosis = 1) tend to have higher average sizes, due to higher average radius values, and greater irregularity, due to high average concavity values, compared to benign tumors (diagnosis = 0).
+Based on initial observations, the summary statistics show a consistent pattern, indicating that malignant tumors (diagnosis = 1) tend to have higher average sizes, due to higher average radius values, and greater irregularity, due to high average concavity values, compared to benign tumors (diagnosis = 0), as seen in @tbl-benign-malignant.
 
-```{r}
+```{r, label = "tbl-benign-malignant"}
 library(dplyr)
 
 summary_stats <- df %>%
@@ -339,7 +338,7 @@ In our cost analysis, we have prioritized the care of the patient over everythin
 
 Additionally, we have found that patients who are able to receive their diagnosis earlier are subject to a more cost efficient treatment than a patients who receive their diagnosis in say stage IV. According to WebMD, women who are able to obtain care in the primary stages of cancer when the tumor is small and localized pay \$48,500 on average whereas a woman who obtains care during stage IV is likely to pay \$183,00.* (note that these are averages and insurance alleviation may differ from woman to woman) We prioritize this concern as 1 in 13 women report cancer treatment costs are higher than intitially anticipated, so much so that women also report avoiding going to the doctor in fear of having to pay an exuberant amount. Moreover, when cancer is caught late, it places a stressor on the hospital as well; in some cases, the hospital itself may not be equipped to handle an influx of patients with stage IV cancer but would be better equipped to eliminate cancer had it been caught earlier. Consequently, it is our goal to diagnosis tumor as malignant in women as soon as possible to optimize results and minimize financials in every domain.
 
-There is also a cost emotionally when cancer is misdiagnosed. If start of treatment is delayed, the mortality rate skyrockets. While mass media reports these statistics at an objective lens, it is important to understand that each breast-cancer-related death results in the loss of a mother, sister, or partner. The impact cancer emotionally has on an individual household cannot be quantified but should not go unacknowledged. As we cannot provide a summary statistic on grief, healthcare is a field where we are touching the lives of real people. Moreover, we choose to craft our model in a way that reflects our consideration of protecting general livelihood, not just for the patient, but for those who love her as well.
+There is also a cost emotionally when cancer is misdiagnosed. If start of treatment is delayed, the mortality rate skyrockets[@utmb]. While mass media reports these statistics at an objective lens, it is important to understand that each breast-cancer-related death results in the loss of a mother, sister, or partner. The impact cancer emotionally has on an individual household cannot be quantified but should not go unacknowledged. As we cannot provide a summary statistic on grief, healthcare is a field where we are touching the lives of real people. Moreover, we choose to craft our model in a way that reflects our consideration of protecting general livelihood, not just for the patient, but for those who love her as well.
 
 As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
 
@@ -442,7 +441,7 @@ opt_threshold <- coords$threshold
 pred_class <- ifelse(prob_test >= opt_threshold, 1, 0)
 ```
 
-```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix", out.width="80%", label = "tbl-conf-mat"}
+```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix with LASSO", out.width="80%", label = "tbl-conf-mat"}
 # Building the Confusion Matrix
 cm <- table(Predicted = pred_class, Actual = y_test)
 cm_df <- as.data.frame.matrix(cm)
@@ -471,8 +470,8 @@ spec <- sum(pred_class == 0 & y_test == 0) / sum(y_test == 0)
 
 Model performance was further evaluated using an ROC curve and a measure of AUC, providing a threshold-independent measure of discrimination. The AUC for the ROC curve is 0.9994 which is fairly high, giving us confidence in our model. 
 
-The last step after building the LASSO logistic model was extracting the features which had non-zero coefficients for predicting the probability of a tumor being benign or malignant. Below is a list of the 13 features (out of 30) which the LASSO model indicated were important for predicting the probabilities ordered in descending order of magnitude. 
-```{r, eval=TRUE}
+The last step after building the LASSO logistic model was extracting the features which had non-zero coefficients for predicting the probability of a tumor being benign or malignant. @tbl-selected-features shows the 13 features (out of 30) which the LASSO model indicated were important for predicting the probabilities ordered in descending order of magnitude. 
+```{r, eval=TRUE, label= "tbl-selected-features"}
 # Extracting the coefficient features
 coef_min <- coef(cvfit, s = "lambda.min")
 coef_df <- as.data.frame(as.matrix(coef_min))
@@ -639,7 +638,9 @@ wrap_plots(plots, ncol = 3) &
 
 ```
 
-In Figure 3, we observe that many of the variables to violate nonlinearity. Thus, we also want to quantitatively determine which features should be included as splines by comparing a GLM model to predict malignancy probability with a GAM using only a cubic spline with the selected feature. Then, we compared the change in AIC between the GLM and GAM as well as the p-value for the Chi-Squared test where the cutoff was set at $\alpha = 0.01$. Features which had a drop in AIC with a magnitude of at least 4 and a significant p-value were identified as features with strong evidence of non-linearity. The delta AIC value of 4 was selected using the convention that a drop in AIC greater than 4 is evidence that the GAM meaningfully improves the model fit. 
+** NEED TO FIX Y AXIS HERE
+
+In @fig-log-odds, we observe that many of the variables to violate nonlinearity. Thus, we also want to quantitatively determine which features should be included as splines by comparing a GLM model to predict malignancy probability with a GAM using only a cubic spline with the selected feature. Then, we compared the change in AIC between the GLM and GAM as well as the p-value for the Chi-Squared test where the cutoff was set at $\alpha = 0.01$. Features which had a drop in AIC with a magnitude of at least 4 and a significant p-value were identified as features with strong evidence of non-linearity. The delta AIC value of 4 was selected using the convention that a drop in AIC greater than 4 is evidence that the GAM meaningfully improves the model fit. 
 
 ```{r, eval=TRUE, results = 'asis', tbl.cap="Features with Strong Nonlinearity", out.width="80%", label = "tbl-nonlin-feat"}
 results <- map_dfr(feature_list, function(var) {
@@ -674,14 +675,14 @@ results <- map_dfr(feature_list, function(var) {
 results |> 
   filter(abs(delta_AIC) > 4, significant_0.01 == "YES") |>
   select(variable, delta_AIC) |>
-  kable()
+  kable(caption = "Features with Strong Nonlinearity")
 
 ```
 
-From the results above, the following features were included in the GAM as cubic splines: texture_se, compactness_se, fractal_dimension_se, texture_worst, and concavity_worst. 
+From @tbl-nonlin-feat, the following features were included in the GAM as cubic splines: texture_se, compactness_se, fractal_dimension_se, texture_worst, and concavity_worst. 
 
 From here, the initial GAM model was built using cubic splines for 5 nonlinear features and including the other 8 features as main effects. 
-```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix for Model without Interactions", out.width="80%", label = "tbl-conf-mat-no-inter"}
+```{r, eval=TRUE, results = 'asis', out.width="80%", label = "tbl-conf-mat-no-inter"}
 formula_all <- diagnosis ~ 
   s(texture_se, bs = "cr", k = 10) +
   s(compactness_se, bs = "cr", k = 10) +
@@ -724,7 +725,7 @@ cm_labeled2 <- data.frame(
   Benign  = cm2[, "0"],
   Malignant = cm2[, "1"]
 )
-kable(cm_labeled2, caption = "Confusion Matrix", align = "c")
+kable(cm_labeled2, caption = "Confusion Matrix for Model without Interactions", align = "c")
 
 roc_obj <- roc(df_test_pred$.obs, df_test_pred$.pred_prob, quiet = TRUE)
 auc_val <- as.numeric(pROC::auc(roc_obj))
@@ -817,14 +818,14 @@ cm_labeled2_best <- data.frame(
   Benign  = cm2_best[, "0"],
   Malignant = cm2_best[, "1"]
 )
-kable(cm_labeled2_best, caption = "Confusion Matrix", align = "c")
+kable(cm_labeled2_best, caption = "Confusion Matrix for Model with Interactions", align = "c")
 
 roc_obj_best <- roc(df_test_pred_best$.obs, 
                df_test_pred_best$.pred_prob, quiet = TRUE)
 auc_val_best <- as.numeric(pROC::auc(roc_obj))
 #print(auc_val_best)
 ```
-We observe that the Confusion matrix is identical to the GAM without interactions, but this is likely due to the small sample size. Additionally, the accuracy, sensitivity, and specificity remain the same but this can likely also be attributed to the small sample size and the strong performance of the original model without interactions.
+We observe that the Confusion matrix in @tbl-conf-max-inter is identical to that with the GAM without interactions in @tbl-conf-mat-no-inter, but this is likely due to the small sample size. Additionally, the accuracy, sensitivity, and specificity remain the same but this can likely also be attributed to the small sample size and the strong performance of the original model without interactions.
 
 ```{r, eval = FALSE}
 summary(mod_best)
@@ -852,7 +853,7 @@ tissue, signaling which measurements warrant closer attention in future
 imaging protocols. In healthcare settings, such tools can also guide
 resource allocation by highlighting high risk cases sooner, especially
 when imaging workloads are high (with over 42 million mammograms
-performed annually across the US and UK, Nature 2020).
+performed annually across the US and UK)[@nature].
 
 By ensuring that our model is interpretable and clearly justified, it
 can be used ethically and effectively in supporting clinical workflows,
@@ -879,8 +880,8 @@ Lastly, there are limitations to the modeling assumptions for lasso logistic reg
 
 ## Future Analysis
 
-Further analysis in the cancer field is pivotal as healthcare advancements are vast and rapidy growinf to fulfill the needs of patients. With that, we have prioritized recommendations on how to best optimize future research on Breast Cancer Diagnosis. We suggest investigating the interaction effects between stages of cancer and existing variables. We affirm that this insight would provide important information to healthcare professionals when it comes to assessing urgency in diagnosis. According to the CDC, most breast cancer diagnosis are caught in the early stages, but when caught in a later stage, the cancer has likely spread to other organs which would coincide with the results we gathered from our model (ie, as radius increases so does the probability of cancer). 
+Further analysis in the cancer field is pivotal as healthcare advancements are vast and rapidy growinf to fulfill the needs of patients. With that, we have prioritized recommendations on how to best optimize future research on Breast Cancer Diagnosis. We suggest investigating the interaction effects between stages of cancer and existing variables. We affirm that this insight would provide important information to healthcare professionals when it comes to assessing urgency in diagnosis. According to the CDC, most breast cancer diagnosis are caught in the early stages, but when caught in a later stage, the cancer has likely spread to other organs which would coincide with the results we gathered from our model (ie, as radius increases so does the probability of cancer)[@cdc_stats]. 
 
-Another suggestion for future work would be to include age, race/ethnicity and socioeconomic class in the data. Not only would this allow us to see how we can ensure proper representation, but also, according to the American Cancer Society, these three factors actually play a role in what stage of cancer (and thus the probability the tumor is malignant or begin) the diagnosis is received. 
+Another suggestion for future work would be to include age, race/ethnicity and socioeconomic class in the data. Not only would this allow us to see how we can ensure proper representation, but also, according to the American Cancer Society, these three factors actually play a role in what stage of cancer (and thus the probability the tumor is malignant or begin) the diagnosis is received [@acs_facts]. 
 
 Our findings have crafted the framework for future researchers to continuously test our model with recent data, and we encourage others to expand on our results with suggestions above or beyond.
