@@ -543,7 +543,7 @@ train_df <- as.data.frame(X2[train_idx, ])
 test_df <- as.data.frame(X2[-train_idx, ])
 ```
 
-```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="80%", fig.width=12, fig.heiught=12, label = "fig-log-odds"}
+```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="60%", fig.width=6, fig.height=6, label = "fig-log-odds"}
 nbins <- 20
 yvar <- "diagnosis"       # your binary outcome
 
@@ -617,8 +617,12 @@ plots <- list(
   p7, p8, p9, p10, p11, p12, p13
 )
 
-wrap_plots(plots, ncol = 3) & 
-  theme(legend.position = "bottom")
+wrap_plots(plots, ncol = 3) +
+  plot_layout(widths = rep(1, 3), heights = rep(1, ceiling(length(plots) / 3))) &
+  theme(
+    legend.position = "bottom",
+    plot.margin = margin(1, 1, 1, 1, "pt")
+  )
 
 ```
 
@@ -747,6 +751,9 @@ These interactions were implemented using tensor-product smooths to
 accommodate differing scales and nonlinear dependence. Model comparison
 using AIC and likelihood ratio tests demonstrated a statistically
 significant improvement in fit over the purely additive GAM. We fit several different models with different interaction terms, but the final model was selected for having the largest drop in AIC, in @tbl-aic, as well as a significant p-value from the Chi-Squared test. @tbl-chi shows that the final p-value for the model with interactions compared to the model without was 0.002 which is significant past the $\alpha = 0.01$ level. 
+
+
+
 
 ```{r, eval=TRUE, tbl.cap = "AIC Comparison of GAM without and with Interactions", label = "tbl-aic"}
 # Building the formula with these interactions
