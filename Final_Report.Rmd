@@ -9,6 +9,20 @@ format:
   pdf:
     cite-method: biblatex
     link-citations: true
+    include-in-header:
+        text: |
+         \usepackage{fvextra}
+         \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+         \DefineVerbatimEnvironment{OutputCode}{Verbatim}{breaklines,commandchars=\\\{\}}
+    header-includes:
+      - \usepackage{indentfirst}
+      - \setlength{\parindent}{1.5em}
+      - \setlength{\parskip}{0pt}
+      - \setlength{\textfloatsep}{6pt}      % space below floats
+      - \setlength{\floatsep}{6pt}          % space between floats
+      - \setlength{\intextsep}{6pt}         % space around tables/figures
+      - \setlength{\abovecaptionskip}{2pt}  % space above caption
+      - \setlength{\belowcaptionskip}{2pt}  % space below caption
 bibliography: references.bib
 link-citations: true
 geometry: margin=0.5in
@@ -32,9 +46,9 @@ The primary goal of our project is to build an interpretable machine
 learning model that can assess whether a breast mass is benign or
 malignant using measurable characteristics such as radius, area,
 smoothness, and concavity extracted from digitized medical images. Our
-analysis has two complementary aims: prediction, where we train a
+analysis has two complementary aims: 1. prediction, where we train a
 classifier to estimate the probability that a new mass is malignant, and
-inference, where we identify and interpret the features that have the
+2. inference, where we identify and interpret the features that have the
 greatest influence on these probability assignments. Because our target
 audience includes clinicians, researchers, and individuals without a
 technical background, we emphasize transparency and interpretability,
@@ -49,7 +63,7 @@ central concerns in medical applications, and our modeling pipeline is
 intentionally designed to balance performance with transparency,
 ensuring that the results are clinically meaningful and accessible.
 
-Our code is available at https://github.com/gradypurcell/STA-325-Final-Project/tree/main[@github].
+Our code is available at https://github.com/gradypurcell/STA-325-Final-Project/tree/main [@github].
 
 ## Importance and Relevance
 
@@ -69,13 +83,11 @@ prone to human error, particularly false positives and false negatives.
 Recent research demonstrates that machine learning (ML) can meaningfully
 strengthen diagnostic processes. For instance, ML models have shown
 higher accuracy than clinicians in predicting several cancers, including
-breast, brain, and lung cancer [@pmc]. A 2020 DeepMind based
-system outperformed human specialists in breast cancer detection, and other ML systems have reached 97% accuracy in
-identifying common types of lung cancer [@pmc;@nature]. These findings
-highlight the potential for ML driven tools to enhance clinical
+breast, brain, and lung cancer, where 2020 DeepMind-based
+system outperformed human specialists in breast cancer detection, and other ML systems have reached 97% accuracy in identifying common types of lung cancer [@pmc;@nature]. These findings highlight the potential for ML driven tools to enhance clinical
 workflows and reduce diagnostic uncertainty.
 
-Even within the specific Wisconsin Breast Cancer dataset used here,
+Even within the specific Wisconsin Breast Cancer dataset we analyzed,
 prior research has achieved strong performance: Support Vector Machines
 have reached 87–89% accuracy in distinguishing malignant from benign
 masses, and deep learning models such as CNNs have successfully
@@ -94,13 +106,13 @@ diagnostic tools designed to complement, not replace, medical expertise.
 
 ## Overview of Proposed Methodology
 
-Since we are building our model to assist doctors with diagnosing cancer patients, our model needs to be interpretable so doctors are more confident in their diagnosis and can explain the factors which led to the final diagnosis. To do this, we will first use a LASSO logistic regression model to shrink the features so that only relevant features are included in the final model. Shrinkage is important in this setting because it is likely that there is multicorrelation between many of the features so we don't want our final model to include all of the features. Once the LASSO logistic model provides the relevant features, we will build a Generalized Additive Model (GAM) since our EDA has indicated nonlinearity between the predictors and state of the tumor, so we want our final model to have a balance between flexibility and interpretability. After selecting which features should be included as non-linear splines in the model, we will then include interactions based on exploratory analysis, domain knowledge, and model performance. 
+Since our model would assist doctors with diagnosing cancer patients, our model needs to be interpretable so that doctors are more confident in their diagnosis and can explain the factors which led to the final diagnosis. To do this, we will first use a LASSO logistic regression model to shrink the features so that only relevant features are included in the final model-- there is likely multicollinearity between many of the features that shrinkage addresses. Once the LASSO logistic model provides the relevant features, we will build a Generalized Additive Model (GAM) since our EDA has indicated nonlinearity between the predictors and state of the tumor, so we want our final model to have a balance between flexibility and interpretability. After selecting which features should be included as non-linear splines in the model, we include interactions based on exploratory analysis, domain knowledge, and model performance. 
 
 # **Data**
 
 The dataset used in this analysis comes from the Diagnostic Wisconsin
 Breast Cancer Database (WBCD), originally created from digitized images
-of fine needle aspiration (FNA) biopsies taken from breast masses[@data]. The
+of fine needle aspiration (FNA) biopsies taken from breast masses [@data]. The
 version used here was downloaded from Kaggle, but the source dataset was
 donated on October 31, 1995. Although imaging modalities have improved
 significantly since 1995, modern systems continue to quantify similar
@@ -113,15 +125,9 @@ Each observation corresponds to a single breast mass and contains 30
 continuous predictors, derived from 10 underlying cell nucleus features:
 radius, texture, perimeter, area, smoothness, compactness, concavity,
 concave points, symmetry, fractal dimension. Each of these ten features
-was recorded in three forms:
+was recorded in three forms: 1.  Mean – the average value across the tumor sample. 2.  Standard Error (SE) – the variability of that feature. 3.  Worst (maximal) – the mean of the highest three values
 
-1.  Mean – the average value across the tumor sample
-2.  Standard Error (SE) – the variability of that feature
-3.  Worst (maximal) – the mean of the highest three values
-
-The response variable is the diagnosis: malignant (M) or benign (B).
-
-There are 569 observations, including 357 benign (62.7%) and 212
+The response variable is the diagnosis: malignant (M) or benign (B). There are 569 observations, including 357 benign (62.7%) and 212
 malignant (37.2%) cases. Although benign tumors are more common in the dataset, 
 the dataset is only moderately imbalanced, so rebalancing procedures such as
 SMOTE or class weighting are not necessary for this analysis.
@@ -137,11 +143,10 @@ analysis (EDA) and model interpretation because each predictor has a
 clear biological meaning and can be reasoned about in clinical terms
 (e.g., radius relates to tumor size, concavity relates to irregularity).
 
-The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texture, smoothness, concavity, concave points and symmetry. @tbl-key-vars describes some of the key variables we used. 
+The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texture, smoothness, concavity, concave points and symmetry. @tbl-key-vars describes these the key variables. 
 
 ```{r, label = "tbl-key-vars"}
-library(knitr)
-
+library(kableExtra)
 variables <- data.frame(
   Variable = c(
   "Radius", "Texture", "Smoothness", "Fractal dimension",
@@ -158,15 +163,15 @@ variables <- data.frame(
   "Severity of concave portions of the contour"
   )
 )
-kable(variables, caption = "Key Feature Variable Descriptions", align = "c") 
+kable(variables, caption = "Key Feature Variable Descriptions", align = "c") |>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 ```
 
 # **Modeling Methodology**
 
-Our methodology consists of five main stages: exploratory data
-analysis, threshold optimization and evaluation, preliminary model
-comparison, regularized model selection, and nonlinear modeling with
-generalized additive models (GAMs).
+Our methodology consists of five main stages: EDA, threshold optimization and evaluation, preliminary modelcomparison, regularized model selection, and nonlinear modeling with GAMs.
 
 ## Exploratory Data Analysis (EDA)
 
@@ -184,6 +189,7 @@ library(mgcv)
 library(tidyr)
 library(knitr)
 library(kableExtra)
+library(patchwork)
 ```
 
 We began by conducting a comprehensive exploratory data analysis to
@@ -193,17 +199,14 @@ included histograms, boxplots, and scatterplots across both classes
 (benign vs. malignant).
 
 Although certain variables showed skewed distributions, which is
-expected in biological measurements, none raised concerns severe enough
-to justify transformation. Outliers were examined but ultimately retained, 
+expected in biological measurements, none raised any concerns severe enough
+to justify transformation, especially given that GAMs do not need the linear assumptions. Outliers were examined but ultimately retained, 
 as they reflect real biological variation rather than measurement error. 
 No missing data were present, so no imputation or deletion procedures were 
 required. The EDA thus served primarily to guide expectations about predictor 
 behavior and to inform our choice of appropriate models.
 
-
-
 ```{r, results = 'asis', fig.cap="EDA for Interaction Terms", out.width="100%", fig.width=12, fig.height=4, label="fig-eda-interactions"}
-library(patchwork)
 df <- read.csv("Data/data.csv")
 
 # smoothness_worst vs concavity_worst
@@ -235,11 +238,9 @@ We also explored bivariate EDA to examine potential interaction effects between 
 
 ## Building a Model of a Mass
 
-For two observations of a malignant and a benign tumor, we have attempted to translate the variables of the model into a representation of a mass. The purpose of this exercise was to gain intuition into the features of the mass and explore the differences between malignant and benign tumors. 
+For two observations of a malignant and a benign tumor, we have attempted to translate the variables of the model into a representation of a mass to gain intuition into the features of the mass and explore the differences between malignant and benign tumors. 
 
 ```{r, label = "fig-mass", fig.width=4, fig.height=3, fig.cap = "Simulated Tumor Cross-Section: Benign vs Malignant"}
-library(dplyr)
-library(ggplot2)
 
 # pick one malignant and one benign case
 malignant_tumor <- df %>%
@@ -295,13 +296,11 @@ ggplot(tumors, aes(x = x, y = y)) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "none", plot.title = element_text(size = 10))
 ```
-From @fig-mass of the tumor cross sections, we can see that the selected malignant tumor appears to be larger and more irregular and dispersed around the edges compared to the selected benign tumor. Thus, the observed malignant tumor has a larger average radius and higher concavity measures than the benign tumor. 
+Based on the tumor cross sections in @fig-mass the selected malignant tumor appears to be larger and more irregular and dispersed around the edges compared to the selected benign tumor. Thus, the observed malignant tumor has a larger average radius and higher concavity measures than the benign tumor. 
 
 Based on initial observations, the summary statistics show a consistent pattern, indicating that malignant tumors (diagnosis = 1) tend to have higher average sizes, due to higher average radius values, and greater irregularity, due to high average concavity values, compared to benign tumors (diagnosis = 0), as seen in @tbl-benign-malignant.
 
 ```{r, label = "tbl-benign-malignant"}
-library(dplyr)
-
 summary_stats <- df %>%
   mutate(
     diagnosis_num =
@@ -316,79 +315,62 @@ summary_stats <- df %>%
     mean_concavity_mean  = mean(concavity_mean, na.rm = TRUE),
     mean_concavity_worst = mean(concavity_worst, na.rm = TRUE)
   )
-
+colnames(summary_stats) <- c("Diagnosis", "Avg. Mean Radius", "Avg. WorstRadius", "Avg. Mean Concavity", "Avg. Worst Concavity")
 kable(
   summary_stats,
   digits = 2,
   caption = "Benign vs Malignant Tumor Characteristics",
   align = "c"
-)
+) |>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 ```
 
 ## Cost Analysis and Threshold Selection 
 
-We researched the cost of false positives and negatives to compute
-a cost based loss function to determine the optimal classification
-threshold. This threshold will reflect the asymmetric cost of false
-negatives (missing a malignant tumor) versus false positives
-(unnecessary further testing), and will guide our final decision rule
-applied to our model. 
+We determine the optimal classification threshold that reflect the asymmetric cost of false negatives (missing a malignant tumor) versus false positives
+(unnecessary further testing). Missing a malignant tumor has substantially higher medical, emotional, and financial costs. Early diagnosis improves survival and enables more effective treatment, and clinicians consistently emphasize the psychological and clinical urgency of the timely detection [@utmd]. 
 
-In our cost analysis, we have prioritized the care of the patient over everything. We are steadfast in our commitment to correctly reporting when cancer is present due to recovery being more possible when caught early. According to Dr. Grayson from University of Texas Medical Branch, a woman's psychological state determines her ability to be responsive to treatment. She emphasizes the urgency of diagnosis to ensure women are confident in the support and care they receive. She affirms that there is a mental cost in delaying treatment as the condition worsens and so do spirits of hope.
+It is important to understand that each breast-cancer-related death results in the loss of a mother, sister, or partner. The impact cancer emotionally has on an individual household cannot be quantified but should not go unacknowledged. As we cannot provide a summary statistic on grief, healthcare is a field where we are touching the lives of real people. Moreover, we choose to craft our model in a way that reflects our consideration of protecting general livelihood, not just for the patient, but for those who love her as well.
 
-Additionally, we have found that patients who are able to receive their diagnosis earlier are subject to a more cost efficient treatment than a patients who receive their diagnosis in say stage IV. According to WebMD, women who are able to obtain care in the primary stages of cancer when the tumor is small and localized pay \$48,500 on average whereas a woman who obtains care during stage IV is likely to pay \$183,00.* (note that these are averages and insurance alleviation may differ from woman to woman) We prioritize this concern as 1 in 13 women report cancer treatment costs are higher than intitially anticipated, so much so that women also report avoiding going to the doctor in fear of having to pay an exuberant amount. Moreover, when cancer is caught late, it places a stressor on the hospital as well; in some cases, the hospital itself may not be equipped to handle an influx of patients with stage IV cancer but would be better equipped to eliminate cancer had it been caught earlier. Consequently, it is our goal to diagnosis tumor as malignant in women as soon as possible to optimize results and minimize financials in every domain.
-
-There is also a cost emotionally when cancer is misdiagnosed. If start of treatment is delayed, the mortality rate skyrockets[@utmb]. While mass media reports these statistics at an objective lens, it is important to understand that each breast-cancer-related death results in the loss of a mother, sister, or partner. The impact cancer emotionally has on an individual household cannot be quantified but should not go unacknowledged. As we cannot provide a summary statistic on grief, healthcare is a field where we are touching the lives of real people. Moreover, we choose to craft our model in a way that reflects our consideration of protecting general livelihood, not just for the patient, but for those who love her as well.
-
-As a result, our threshold selection prioritizes maximizing sensitivity to minimize false negatives. False-negative results can lead to delayed detection and treatment, resulting in greater long-term costs, morbidity, and mortality. One study estimated the national cost-savings in the U.S. from early diagnosis of cancers to be $26 billion per year due to reduced treatment intensity and improved outcomes (Brill, 2020). 
+Early-stage treatment is far more cost-efficient. For example, women treated when the tumor is small and localized pay \$48,500 on average compared to over \$183,00* for stageIV disease [@webmd_costs]. We prioritize this concern as 1 in 13 women report cancer treatment costs are higher than intitially anticipated, so much so that women also report avoiding going to the doctor in fear of having to pay an exuberant amount. National analyses similarly estimate that early cancer detection could save $26 billion per year nationally, due to reduced treatment intensity, and improved outcomes (Brill, 2020). Thus, the economic and clinical disparities underscore the importance in prioritizing sensitivity to minimize false negatives, diagnosing the tumor as soon as possible.
 
 Prior research also shows that the accuracy of mammography screening increases with patient age, with sensitivity ranging from 76% to 86% and specificity ranging from 87% to 99% across age groups. (Newton, 2025). This gap in threshold shows why maximizing sensitivity matters: since detecting malignant tumors is the harder task, optimizing sensitivity is essential to improving screening effectiveness. Thus, our decision to choose a lower threshold is consistent with addressing current screening practices and reducing future costs associated with delayed diagnoses. 
 
+
+
 ## Preliminary Model Fitting
 
-We next fit several classification models to evaluate baseline
+We fit several classification models to evaluate baseline
 predictive performance and to assess the trade-offs between accuracy,
 interpretability, computational complexity, and clinical
 trustworthiness. The models included: K-Nearest Neighbors (KNN), Random
-Forest, LASSO, Standard Logistic Regression, and Decision Trees. Each
-model was then evaluated using standard metrics including accuracy,
-sensitivity, specificity, and confusion matrices. Cross validation was
-used where appropriate to reduce sampling variability.
+Forest, LASSO, Standard Logistic Regression, and Decision Trees. We evaluate each model using standard metrics including accuracy,
+sensitivity, specificity, and confusion matrices and use cross validation where appropriate to reduce sampling variability.
 
-Although the random forest achieved strong predictive accuracy, it
-lacked interpretability which should be prioritized since this model will be used by doctors to diagnose whether a breast cancer mass is benign or malignant at an early stage. 
-KNN performed reasonably but does not provide coefficients, feature weights, or insight into mechanism. Standard logistic regression was interpretable but tended to overfit
+Although the random forest achieves strong predictive accuracy, it
+lacks interpretability, which should be prioritized since this model will be used by doctors to diagnose whether a breast cancer mass is benign or malignant at an early stage. 
+KNN performs reasonably but does not provide coefficients, feature weights, or insight into mechanism. Standard logistic regression is interpretable but tends to overfit
 without regularization due to the high number of correlated predictors.
 
-## Model Selection and Rationale
-
+## Regularized Logistic Regression and Feature Selection
 Based on accuracy, interpretability, stability, and feature selection
 capability, we selected the LASSO logistic regression model as our
-primary predictive and inferential tool. LASSO automatically performs
-variable selection by shrinking less important coefficients to zero,
+primary predictive and inferential tool, since it performs
+variable selection,
 providing a concise, clinically meaningful set of predictors and
-potential interactions.
-
-After selecting these top predictors, we further fit a GAM informed by
-the LASSO selected features. We selected a GAM model for interpretability and flexibility in including nonlinear terms. GAM models are more interpretable than many other regression techniques since they enable visualization between features and the predicted malignancy probability with interpretability being essential for clinical decisions. Additionally, the nonlinearlity of GAMs is advantageous as tumor characteristics rarely relate to malignancy in linear ways, so GAMs can model predictors using a smooth function like splines to learn curves without assuming linearity which improves predictive performance. 
-
-## Regularized Logistic Regression and Feature Selection
-
-We first fit a LASSO logistic model to perform variable selection and establish a strong, interpretable baseline classifier. The diagnosis variable was
+potential interactions. The diagnosis variable was
 encoded as 1 for malignant and 0 for benign. Identifier columns were
-removed, and the remaining predictors were standardized. The data were
+removed, and the remaining predictors are standardized. The data was
 randomly split into training (80%) and testing (20%) sets. A LASSO
 logistic regression model was fit using 5-fold cross-validation to
-select the optimal penalty parameter with `cv.glmnet`. This approach
-addresses multicollinearity among predictors and prevents overfitting by
-shrinking less informative coefficients to zero. The final LASSO logistic model
-achieved approximately 99% accuracy on the held-out test set, with
+select the optimal penalty parameter with `cv.glmnet`. The final LASSO logistic model
+achieves approximately 99% accuracy on the held-out test set, with
 perfect sensitivity and strong specificity. 
 
 ### Setting the Optimal Threshold
-From the LASSO logistic regression, we determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From the cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351 using Youden's J statistic. Youden's method is a way to choose the "best" classification threshold by maximizing the combined performance of sensitiivty and specificity. The optimal threshold is one that maximizes J = Sensitivity + Specificity - 1. For this diagnostic classification problem, Youden's J statistic chooses the threshold that provides a balance weight to correctly identifying malignant and benign cases. Since cancer diagnosis requires higher sensitivity to avoid missing malignant cases, we want the threshold to be less than 0.5 so the false negative rate is decreased, so 0.351 seems a reasonable value. Other benefits for using Youden's statistics is that it is not distorted by how common cancer is in the dataset and it is transparet for clinicians. 
-
-Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity. Hence, we are less concerned with the model classifying every observation as benign at this threshold given that the specificity is also very high. For the rest of the paper, 0.351 will be the threshold used for classifying a tumor. 
+We determined the optimal threshold to predict whether a mass is benign or malignant based on the assigned probability. From the cost analysis and domain knowledge, we knew that the optimal threshold would maximize sensitivity. Using the `proc` library, we found that the optimal threshold to achieve perfect sensitivity is 0.351 using Youden's J statistic. Youden's method is a way to choose the "best" classification threshold by maximizing the combined performance of sensitiivty and specificity. The optimal threshold is one that maximizes J = Sensitivity + Specificity - 1. For this diagnostic classification problem, Youden's J statistic chooses the threshold that provides a balance weight to correctly identifying malignant and benign cases. Since cancer diagnosis requires higher sensitivity to avoid missing malignant cases, we want the threshold to be less than 0.5, so 0.351 seems a reasonable value. Other benefits for using Youden's statistics is that it is not distorted by how common cancer is in the dataset and it is transparet for clinicians. Although perfect sensitivity often comes at the cost of poor specificity and many false positives, we also observe a high specificity of 0.98 with perfect sensitivity, so we used 0.351 as the threshold for classifying a tumor.
 
 ```{r}
 df <- read.csv("Data/data.csv")
@@ -450,7 +432,10 @@ cm_labeled <- data.frame(
   Benign  = cm[, "0"],
   Malignant = cm[, "1"]
 )
-kable(cm_labeled, caption = "Confusion Matrix", align = "c")
+kable(cm_labeled, caption = "Confusion Matrix", align = "c") |>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 ```
 ```{r, eval=FALSE}
 accuracy <- mean(pred_class == y_test)
@@ -509,7 +494,10 @@ kable(
   df_grouped,
   caption = "Selected Features",
   align = "c"
-)
+) |>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 ```
 
 In summary, the LASSO logistic model yielded a parsimonious subset of clinically
@@ -535,12 +523,8 @@ fractal_dimension_se, texture_worst and concavity_worst, exhibited clear nonline
 suggesting that a purely linear model may be misspecified.
 
 ## Generalized Additive Models (GAMs)
+We fit GAMs informed by the LASSO selected features as it provides interpretability and flexibility in including nonlinear terms. GAM models are more interpretable than many other regression techniques since they enable visualization between features and the predicted malignancy probability with interpretability being essential for clinical decisions. GAMs model the log-odds of malignancy as a sum of smooth functions of predictors, allowing nonlinear relationships to be captured without requiring explicit interaction terms.
 
-To flexibly model these nonlinear effects while preserving
-interpretability, we employed Generalized Additive Models (GAMs) with a
-binomial logit link. GAMs model the log-odds of malignancy as a sum of
-smooth functions of predictors, allowing nonlinear relationships to be
-captured without requiring explicit interaction terms.
 
 We compared different spline bases (thin-plate regression splines,
 cubic regression splines, and thin-plate shrinkage splines) for individual predictors using AIC, REML
@@ -548,7 +532,7 @@ scores, and visual inspection. Restricted Maximum Likelihood (REML) was used to 
 provided better stability and more realistic probability behavior, and
 were therefore selected.
 
-After determining the appropriate spline to be cubic splines, we selected which features show strong violation of nonlinearity so we can include them in splines. All other variables which don't show strong evidence of nonlinearity will be included as main effects or interaction terms. To do this, we first binned each of the predictors and calculated the appropriate log-odds of malignancy within the training data. We then visualized the logit plot for each predictor to determine where we could see strong violations of nonlinearity. 
+We then selected which features show strong violation of nonlinearity so we can include them in splines. All other variables which don't show strong evidence of nonlinearity will be included as main effects or interaction terms, so we first binned each of the predictors and calculated the appropriate log-odds of malignancy within the training data. We then visualized the logit plot for each predictor to determine where we could see strong violations of nonlinearity. 
 
 ```{r}
 # Getting the training dataframe
@@ -559,7 +543,7 @@ train_df <- as.data.frame(X2[train_idx, ])
 test_df <- as.data.frame(X2[-train_idx, ])
 ```
 
-```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="80%", fig.width=12, label = "fig-log-odds"}
+```{r, eval = TRUE, results = 'asis', fig.cap="Log-Odds Plots", out.width="80%", fig.width=12, fig.heiught=12, label = "fig-log-odds"}
 nbins <- 20
 yvar <- "diagnosis"       # your binary outcome
 
@@ -638,8 +622,6 @@ wrap_plots(plots, ncol = 3) &
 
 ```
 
-** NEED TO FIX Y AXIS HERE
-
 In @fig-log-odds, we observe that many of the variables to violate nonlinearity. Thus, we also want to quantitatively determine which features should be included as splines by comparing a GLM model to predict malignancy probability with a GAM using only a cubic spline with the selected feature. Then, we compared the change in AIC between the GLM and GAM as well as the p-value for the Chi-Squared test where the cutoff was set at $\alpha = 0.01$. Features which had a drop in AIC with a magnitude of at least 4 and a significant p-value were identified as features with strong evidence of non-linearity. The delta AIC value of 4 was selected using the convention that a drop in AIC greater than 4 is evidence that the GAM meaningfully improves the model fit. 
 
 ```{r, eval=TRUE, results = 'asis', tbl.cap="Features with Strong Nonlinearity", out.width="80%", label = "tbl-nonlin-feat"}
@@ -675,7 +657,10 @@ results <- map_dfr(feature_list, function(var) {
 results |> 
   filter(abs(delta_AIC) > 4, significant_0.01 == "YES") |>
   select(variable, delta_AIC) |>
-  kable(caption = "Features with Strong Nonlinearity")
+  kable(caption = "Features with Strong Nonlinearity") |>
+    kable_styling(latex_options = c("hold_position", "scale_down"),
+                  font_size = 9,
+                  full_width = FALSE)
 
 ```
 
@@ -725,7 +710,10 @@ cm_labeled2 <- data.frame(
   Benign  = cm2[, "0"],
   Malignant = cm2[, "1"]
 )
-kable(cm_labeled2, caption = "Confusion Matrix for Model without Interactions", align = "c")
+kable(cm_labeled2, caption = "Confusion Matrix for Model without Interactions", align = "c") |>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 
 roc_obj <- roc(df_test_pred$.obs, df_test_pred$.pred_prob, quiet = TRUE)
 auc_val <- as.numeric(pROC::auc(roc_obj))
@@ -758,9 +746,9 @@ Justification for these interactions are as follows:
 These interactions were implemented using tensor-product smooths to
 accommodate differing scales and nonlinear dependence. Model comparison
 using AIC and likelihood ratio tests demonstrated a statistically
-significant improvement in fit over the purely additive GAM. We fit several different models with different interaction terms, but the final model was selected for having the largest drop in AIC as well as a significant p-value from the Chi-Squared test. 
+significant improvement in fit over the purely additive GAM. We fit several different models with different interaction terms, but the final model was selected for having the largest drop in AIC, in @tbl-aic, as well as a significant p-value from the Chi-Squared test. @tbl-chi shows that the final p-value for the model with interactions compared to the model without was 0.002 which is significant past the $\alpha = 0.01$ level. 
 
-```{r, eval=TRUE}
+```{r, eval=TRUE, tbl.cap = "AIC Comparison of GAM without and with Interactions", label = "tbl-aic"}
 # Building the formula with these interactions
 formula_best <- diagnosis ~ 
   s(texture_se, bs = "cr", k = 10) +
@@ -785,10 +773,20 @@ mod_best <- bam(formula_best,
                discrete = TRUE,      # huge speed boost
                select = TRUE)
 
-AIC(mod_all, mod_best)
-anova(mod_all, mod_best, test="Chisq")
+kable(AIC(mod_all, mod_best), caption="AIC Comparison of GAM without and with Interactions") |>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 ```
-The final p-value from the Chi-squared test for the model with interactions compared to the model without was 0.002 which is significant past the $\alpha = 0.01$ level. 
+
+```{r, eval=TRUE, tbl.cap = "Chi-square with GAM without and with interactions", label = "tbl-chi"}
+anova_out = anova(mod_all, mod_best, test="Chisq")
+anova_table <- as.data.frame(anova_out)
+kable(anova_table, caption = "Chi-square with GAM without and with interactions")|>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
+```
 
 We then assessed the model performance of this GAM with interactions on the test dataset.
 
@@ -818,7 +816,10 @@ cm_labeled2_best <- data.frame(
   Benign  = cm2_best[, "0"],
   Malignant = cm2_best[, "1"]
 )
-kable(cm_labeled2_best, caption = "Confusion Matrix for Model with Interactions", align = "c")
+kable(cm_labeled2_best, caption = "Confusion Matrix for Model with Interactions", align = "c")|>
+  kable_styling(latex_options = c("hold_position", "scale_down"),
+                font_size = 9,
+                full_width = FALSE)
 
 roc_obj_best <- roc(df_test_pred_best$.obs, 
                df_test_pred_best$.pred_prob, quiet = TRUE)
@@ -853,7 +854,7 @@ tissue, signaling which measurements warrant closer attention in future
 imaging protocols. In healthcare settings, such tools can also guide
 resource allocation by highlighting high risk cases sooner, especially
 when imaging workloads are high (with over 42 million mammograms
-performed annually across the US and UK)[@nature].
+performed annually across the US and UK) [@nature].
 
 By ensuring that our model is interpretable and clearly justified, it
 can be used ethically and effectively in supporting clinical workflows,
@@ -878,9 +879,7 @@ Lastly, there are limitations to the modeling assumptions for lasso logistic reg
 
 # **Conclusion**
 
-## Future Analysis
-
-Further analysis in the cancer field is pivotal as healthcare advancements are vast and rapidy growinf to fulfill the needs of patients. With that, we have prioritized recommendations on how to best optimize future research on Breast Cancer Diagnosis. We suggest investigating the interaction effects between stages of cancer and existing variables. We affirm that this insight would provide important information to healthcare professionals when it comes to assessing urgency in diagnosis. According to the CDC, most breast cancer diagnosis are caught in the early stages, but when caught in a later stage, the cancer has likely spread to other organs which would coincide with the results we gathered from our model (ie, as radius increases so does the probability of cancer)[@cdc_stats]. 
+Further analysis in the cancer field is pivotal as healthcare advancements are vast and rapidy growinf to fulfill the needs of patients. With that, we have prioritized recommendations on how to best optimize future research on Breast Cancer Diagnosis. We suggest investigating the interaction effects between stages of cancer and existing variables. We affirm that this insight would provide important information to healthcare professionals when it comes to assessing urgency in diagnosis. According to the CDC, most breast cancer diagnosis are caught in the early stages, but when caught in a later stage, the cancer has likely spread to other organs which would coincide with the results we gathered from our model (ie, as radius increases so does the probability of cancer) [@cdc_stats]. 
 
 Another suggestion for future work would be to include age, race/ethnicity and socioeconomic class in the data. Not only would this allow us to see how we can ensure proper representation, but also, according to the American Cancer Society, these three factors actually play a role in what stage of cancer (and thus the probability the tumor is malignant or begin) the diagnosis is received [@acs_facts]. 
 
