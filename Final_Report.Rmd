@@ -139,6 +139,8 @@ clear biological meaning and can be reasoned about in clinical terms
 The 13 predictors selected from the LASSO logistic model can be grouped into three categories: those which measure mean, standard error, and worst. The mean variables include compactness and concave points. The standard error features are radius, texture, smoothness, compactness and fractal dimension. Lastly, the worst variables are radius, texure, smoothness, concavity, concave points and symmetry.
 
 ```{r}
+library(knitr)
+
 variables <- data.frame(
 Variable = c(
 "Radius", "Texture", "Smoothness", "Fractal dimension",
@@ -233,9 +235,96 @@ We also explored bivariate EDA to examine potential interaction effects between 
 
 ## Building a Model of a Mass
 
-For one observation of the data, we have attempted to translate the variables into the model into a 3D representation of a mass. The purpose of this exercise was to gain intuition into how different variables translate into features of the mass.
+For two observations of a malignant and a benign tumor, we have attempted to translate the variables of the model into a representation of a mass. The purpose of this exercise was to gain intuition into the features of the mass and explore the differences between malignant and benign tumors. 
 
-** ABBY INSERT WORK HERE
+```{r, fig.width=4, fig.height=3}
+library(dplyr)
+library(ggplot2)
+
+# pick one malignant and one benign case
+malignant_tumor <- df %>%
+  filter(diagnosis == "M") %>%    # 1 = malignant
+  slice(1)
+
+benign_tumor <- df %>%
+  filter(diagnosis == "B") %>%    # 0 = benign
+  slice(1)
+
+# malignant_tumor
+# benign_tumor
+
+simulate_tumor <- function(radius_mean, concavity_worst,
+                           n_points = 6000, seed = 1) {
+  set.seed(seed)
+  phi   <- runif(n_points, 0, pi)
+  theta <- runif(n_points, 0, 2*pi)
+
+  base_r  <- radius_mean
+  bump_sd <- concavity_worst * 3  # roughness control
+
+  r <- pmax(0.1, rnorm(n_points, mean = base_r, sd = bump_sd))
+
+  x <- r * sin(phi) * cos(theta)
+  y <- r * sin(phi) * sin(theta)
+  z <- r * cos(phi)
+
+  tibble(x = x, y = y, z = z, r = r)
+}
+
+tumor_mal <- simulate_tumor(malignant_tumor$radius_mean,
+                           malignant_tumor$concavity_worst,
+                           seed = 10) %>%
+  mutate(type = "Malignant (1)")
+
+tumor_ben <- simulate_tumor(benign_tumor$radius_mean,
+                           benign_tumor$concavity_worst,
+                           seed = 20) %>%
+  mutate(type = "Benign (0)")
+
+tumors <- bind_rows(tumor_mal, tumor_ben)
+
+lim <- max(abs(tumors$x), abs(tumors$y))
+
+ggplot(tumors, aes(x = x, y = y)) +
+  geom_point(aes(color = type), alpha = 0.35, size = 0.35) +
+  facet_wrap(~type, nrow = 1) +
+  coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
+  labs(
+    title = "Figure 2. Simulated Tumor Cross-Section: Benign vs Malignant",
+    x = "X (mm)", y = "Y (mm)", color = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none", plot.title = element_text(size = 10))
+```
+From this visualization of the tumor cross sections, we can see that the selected malignant tumor appears to be larger and more irregular and dispersed around the edges compared to the selected benign tumor. Thus, the observed malignant tumor has a larger average radius and higher concavity measures than the benign tumor. 
+
+These observations are consistent with the calculated summary statistics across all tumors, showing that malignant tumors (diagnosis = 1) tend to have higher average sizes, due to higher average radius values, and greater irregularity, due to high average concavity values, compared to benign tumors (diagnosis = 0).
+
+```{r}
+library(dplyr)
+
+summary_stats <- df %>%
+  mutate(
+    diagnosis_num =
+      if (is.numeric(diagnosis) || is.integer(diagnosis)) diagnosis
+      else ifelse(diagnosis == "M", 1, 0)
+  ) %>%
+  group_by(diagnosis_num) %>%
+  summarise(
+    mean_radius_mean  = mean(radius_mean, na.rm = TRUE),
+    mean_radius_worst = mean(radius_worst, na.rm = TRUE),
+  
+    mean_concavity_mean  = mean(concavity_mean, na.rm = TRUE),
+    mean_concavity_worst = mean(concavity_worst, na.rm = TRUE)
+  )
+
+kable(
+  summary_stats,
+  digits = 2,
+  caption = "Benign vs Malignant Tumor Characteristics",
+  align = "c"
+)
+```
 
 ## Cost Analysis and Threshold Selection 
 
