@@ -298,7 +298,7 @@ ggplot(tumors, aes(x = x, y = y)) +
 ```
 From this visualization of the tumor cross sections, we can see that the selected malignant tumor appears to be larger and more irregular and dispersed around the edges compared to the selected benign tumor. Thus, the observed malignant tumor has a larger average radius and higher concavity measures than the benign tumor. 
 
-These observations are consistent with the calculated summary statistics across all tumors, showing that malignant tumors (diagnosis = 1) tend to have higher average sizes, due to higher average radius values, and greater irregularity, due to high average concavity values, compared to benign tumors (diagnosis = 0).
+Based on initial observations, the summary statistics show a consistent pattern, indicating that malignant tumors (diagnosis = 1) tend to have higher average sizes, due to higher average radius values, and greater irregularity, due to high average concavity values, compared to benign tumors (diagnosis = 0).
 
 ```{r}
 library(dplyr)
@@ -737,8 +737,7 @@ The model performance for this base GAM was assessed using the test dataset. The
 summary(mod_all)
 ```
 
-** ADD INTERPRETATION HERE
-
+Based on the output to our GAM model without interactions, there are several linear and nonlinear predictors that have statistically significant relationships with the log odds of diagnosis. For linear predictors, it appears that the mean concave points, radius SE, and radius worst are positively associated with tumor malignancy, such that larger tumors and those with more concave points increase the log-odds them being malignant. Furthermore, mean compactness shows a negative association with tumor malignancy, indicating that on average, the more compact a tumor is, the less likely it is to be malignant. For nonlinear predictors, it appears that texture SE and texture worst have a statistically significant non-linear relationship with tumor malignancy, indicating that variability in tumor texture does impact diagnosis. 
 
 ## Adding Interaction Effects
 
@@ -791,6 +790,7 @@ anova(mod_all, mod_best, test="Chisq")
 The final p-value from the Chi-squared test for the model with interactions compared to the model without was 0.002 which is significant past the $\alpha = 0.01$ level. 
 
 We then assessed the model performance of this GAM with interactions on the test dataset.
+
 ```{r, eval=TRUE, results = 'asis', tbl.cap="Confusion Matrix for Model with Interactions", out.width="80%", label="tbl-conf-max-inter"}
 df_test_pred_best <- test_df |>
   mutate(
@@ -829,8 +829,7 @@ We observe that the Confusion matrix is identical to the GAM without interaction
 ```{r, eval = FALSE}
 summary(mod_best)
 ```
-
-** ADD INTERPRETATION HERE
+Based on the output to our GAM model with interactions, the linear predictors that appear to have statistically significant relationships with tumor malignancy are mean concave points, radius SE, radius worst, and mean compactness, with trends consistent to the model without interactions. Nonlinear predictors that are statistically significant include texture SE and worst SE, consistent to the model without interactions. The tested interaction terms were not statistically significant; however, this model with interactions is still chosen due to higher predictive performance.  
 
 ## Final Model Selection
 
