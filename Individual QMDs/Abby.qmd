@@ -409,3 +409,142 @@ legend(
 
 ```
 
+
+```{r}
+# install.packages("plotly")  # run once
+library(dplyr)
+library(plotly)
+
+# pick one malignant and one benign case
+malignant_tumor <- df %>%
+  filter(diagnosis == 1) %>%    # 1 = malignant
+  slice(1)
+
+benign_tumor <- df %>%
+  filter(diagnosis == 0) %>%    # 0 = benign
+  slice(1)
+
+malignant_tumor
+benign_tumor
+
+simulate_tumor <- function(radius_mean, concavity_worst,
+                           n_points = 5000, x_offset = 0, seed = 1) {
+  set.seed(seed)
+  phi   <- runif(n_points, 0, pi)
+  theta <- runif(n_points, 0, 2*pi)
+
+  base_r  <- radius_mean
+  bump_sd <- concavity_worst * 3   # tune this for more/less roughness
+
+  r <- pmax(0.1, rnorm(n_points, mean = base_r, sd = bump_sd))
+
+  x <- r * sin(phi) * cos(theta) + x_offset
+  y <- r * sin(phi) * sin(theta)
+  z <- r * cos(phi)
+
+  data.frame(x = x, y = y, z = z, r = r)
+}
+
+# --- generate the two blobs (separated so they don't overlap) ---
+rm_mal <- malignant_tumor$radius_mean
+cw_mal <- malignant_tumor$concavity_worst
+rm_ben <- benign_tumor$radius_mean
+cw_ben <- benign_tumor$concavity_worst
+
+offset <- max(rm_mal, rm_ben) * 2
+
+tumor_mal <- simulate_tumor(rm_mal, cw_mal, x_offset = -offset, seed = 10)
+tumor_ben <- simulate_tumor(rm_ben, cw_ben, x_offset =  offset, seed = 20)
+
+# tumor_mal$type <- "Malignant (1)"
+# tumor_ben$type <- "Benign (0)"
+tumors <- bind_rows(tumor_mal, tumor_ben)
+
+plot_ly() %>%
+  add_trace(
+    data = tumor_mal,
+    x = ~x, y = ~y, z = ~z,
+    type = "scatter3d", mode = "markers",
+    name = "Malignant (1)",
+    marker = list(size = 2, opacity = 0.7, color = "red")
+  ) %>%
+  add_trace(
+    data = tumor_ben,
+    x = ~x, y = ~y, z = ~z,
+    type = "scatter3d", mode = "markers",
+    name = "Benign (0)",
+    marker = list(size = 2, opacity = 0.7, color = "blue")
+  ) %>%
+  layout(
+    title = "Simulated 3D Tumors: Malignant vs Benign",
+    scene = list(
+      xaxis = list(title = "X (mm)"),
+      yaxis = list(title = "Y (mm)"),
+      zaxis = list(title = "Z (mm)")
+    ),
+    legend = list(orientation = "h", x = 0.2, y = 1.05)
+  )
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# pick one malignant and one benign case
+malignant_tumor <- df %>%
+  filter(diagnosis == "M") %>%    # 1 = malignant
+  slice(1)
+
+benign_tumor <- df %>%
+  filter(diagnosis == "B") %>%    # 0 = benign
+  slice(1)
+
+malignant_tumor
+benign_tumor
+
+simulate_tumor <- function(radius_mean, concavity_worst,
+                           n_points = 6000, seed = 1) {
+  set.seed(seed)
+  phi   <- runif(n_points, 0, pi)
+  theta <- runif(n_points, 0, 2*pi)
+
+  base_r  <- radius_mean
+  bump_sd <- concavity_worst * 3  # roughness control
+
+  r <- pmax(0.1, rnorm(n_points, mean = base_r, sd = bump_sd))
+
+  x <- r * sin(phi) * cos(theta)
+  y <- r * sin(phi) * sin(theta)
+  z <- r * cos(phi)
+
+  tibble(x = x, y = y, z = z, r = r)
+}
+
+tumor_mal <- simulate_tumor(malignant_tumor$radius_mean,
+                           malignant_tumor$concavity_worst,
+                           seed = 10) %>%
+  mutate(type = "Malignant (1)")
+
+tumor_ben <- simulate_tumor(benign_tumor$radius_mean,
+                           benign_tumor$concavity_worst,
+                           seed = 20) %>%
+  mutate(type = "Benign (0)")
+
+tumors <- bind_rows(tumor_mal, tumor_ben)
+
+lim <- max(abs(tumors$x), abs(tumors$y))
+
+ggplot(tumors, aes(x = x, y = y)) +
+  geom_point(aes(color = type), alpha = 0.35, size = 0.35) +
+  facet_wrap(~type, nrow = 1) +
+  coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
+  labs(
+    title = "Simulated Tumor Cross-Section: Benign vs Malignant",
+    x = "X (mm)", y = "Y (mm)", color = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+```
+
